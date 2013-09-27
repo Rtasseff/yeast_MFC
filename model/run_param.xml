@@ -1,0 +1,109 @@
+<?xml version="1.0"?>
+<biocellion>
+
+<!--
+Biocellion has three main components.
+1) simulating individual discrete agent (single-particle agent and multi-particle agent) behavior,
+2) simulating mechanical interactions between discrete agent particles, and
+3) simulating interactions among discrete agents (and the surrounding environment) via diffusible molecules (modelled using PDEs).
+
+1) has two sub-components.
+1-1) simulating agent state changes and
+1-2) simulating birth and death of agents
+-->
+
+<!-- required, mandatory simulation configuration parameters, required -->
+<required>
+
+<!-- time_step, set the number of baseline time steps, required
+	num_baseline: number of baseline (to simulate 1-2 and 2) time steps, required, integer, [1,)
+-->
+<time_step num_baseline="100"/>
+<!-- domain, parameters describing the simulation domain
+	x: simulation grid size in the x direction, must be an integer multiple of refine_ratio^(number of AMR levels - 1) * blocking_factor (for PDE solves), required, integer, [1,)
+	y: simulation grid size in the y direction, must be an integer multiple of refine_ratio^(number of AMR levels - 1) * blocking_factor (for PDE solves), required, integer, [1,)
+	z: simulation grid size in the z direction, must be an integer multiple of refine_ratio^(number of AMR levels - 1) * blocking_factor (for PDE solves), required, integer, [1,)
+-->
+<domain x="32" y="32" z="32"/>
+<!-- init_data, parameters related to initial cell and grid data, required
+	partition_size: partition size (for parallel processing, 32 or 64 is a reasonable value in most cases), partition_size should be an integer multiple of refine_ratio^(number of AMR levels - 1) * blocking_factor (for PDE solves), required, integer, [1,)
+	src: initial cell and grid data source, set to code to initialize inside the model code, set to file to read from files, required, code|file
+	file_type: valid only when src is set to file. input data file type, set to binary if input data files have the Biocellion binary format (currently only this option is supported), required, binary
+	path: valid only when src is set to file. path to the directory containing input data files, required, text
+-->
+<init_data partition_size="32" src="code"/>
+<!-- output, parameters related to output data, required
+	path: path to the directory to dump output data files, required, text
+	interval: output interval (0: turn off, unit: baseline time steps), required, integer, [0,)
+	particle: set to pvtu to output particle data using the parallel VTK unstructed grid format (currently only the pvtu format is supported), required, pvtu
+	num_extra: set the number of extra variables (in addition to radius and color) for particles, required, integer, [0,)
+	grid: set to vtm to output data using the VTK hierarchical box data format (currently only the vtm format is supported), required, vtm
+-->
+<output path="/users/rtasseff/biocellion/examples/model-pde-test/output" interval="0" particle="pvtu" num_extra="0" grid="vtm"/>
+
+</required>
+
+<!-- optional, optional simulation configuration parameters, optional -->
+<optional>
+
+<!-- model, to set model specific parameters, optional
+	param: saved to Info::modelParam to be used in Model::init(), optional, default="", text
+-->
+<model param=""/>
+
+<!-- stdout, control standard output, optional
+	verbosity: controls the verbosity of standard output messages (5 for the highest level of verbosity), optional, default=1, [0,5]
+-->
+<stdout verbosity="1"/>
+
+<!-- system, parameters related to shared and distributed memory parallelism, optional
+	num_threads: number of threads per node, optional, integer, default=# threads, [1,)
+	num_node_groups: number of node groups in a system, optional, integer, default=1, [1,)
+	num_nodes_per_group: number of nodes per node group, optional, default=# MPI processes, [1,)
+	max_load_imbalance: maximum load imbalance, optional, floating point number, default=1.2, (1.0,)
+-->
+<system num_node_groups="1" num_nodes_per_group="1" max_load_imbalance="1.05" num_threads="8"/>
+
+<!-- super_partition, sets super partition size
+	x(, y, or z): super partition size in the direction of x(, y, or z), a larger value reduces the communication requirement between node groups at the expense of lower parallelism among node groups, this number should be an integer multiple of partition_size, optional, default=the smallest integer multiple of partition_size that is equal to or larger than x(, y, or z) (of domain), integer, [1,)
+-->
+<super_partition x="32" y="32" z="32"/>
+
+<!-- interval, controls the frequency of summary report, load balancing, regridding and checkpointing, optional
+	summary: summary report interval (0: turn off, unit: baseline time steps), optional, default=0, integer, [0,)
+	load_balance: load balancing interval (unit: baseline time steps), optional, integer, default=100, [1,)
+	regridding: regridding interval (unit: baseline time steps), regridding should be equal to or smaller than load_balance and regridding should equally divide load_balance, optional, integer, default=100, [1,)
+	checkpoint: checkpoint interval (0: turn off, unit: baseline time steps), optional, default=0, integer, [0,)
+-->
+<interval summary="1" load_balance="100" regridding="100" checkpoint="100"/>
+
+<!-- amr, controls adaptive mesh refinement
+	refine_ratio: adaptive mesh refinement ratio between two consecutive levels, optional, default=2, 2|4
+    fill_ratio: controls grid efficiency in mesh generation based on model provided tags, large value will generate less filled larger blocks, optional, default=0.5, [0.0,1.0]
+	blocking_factor: box size (in every AMR level) is a multiple of the blocking factor, blocking_factor should be a positive integer power of refine_ratio, optional, default=2, [refine_ratio,)
+-->
+<amr refine_ratio="4" fill_ratio="0.5" blocking_factor="4"/>
+
+<!-- mg_elliptic( or parabolic)_solve, configuration parameters to inverat a matrix (in PDE solves) using a multi-grid method, optional
+	mg_num_pre: number of smoothing steps before averaging, optional, integer, default=3, [1,)
+	mg_num_post: number of smoothing steps after averaging, optional, integer, default=3, [1,)
+	mg_num_bottom: number of smoothing steps at the bottom level, optional, integer, default=3, [1,)
+	mg_v_or_w: set to v to use v-cycle and set to w to use w-cycle, optional, default=v, v|w
+	mg_max_iterations: maximum number of v-(or w-)cycles, optional, integer, default=30 (elliptic) or 20 (parabolic), [1,)
+	mg_epsilon: convergence is assumed if the residual norm is equal to or smaller than the initial residual norm * 1.0^mg_epsilon, optional, integer, default=-15 (elliptic) or -10 (parabolic), (,-1]
+	mg_hang: minimum change per v-(or w-)cycle=1.0^mg_hang, optional, integer, default=-10, (,0]
+	mg_norm_threshold: convergence is assumed if the residual norm is equal to or smaller than 1.0^mg_norm_threshold, integer, default=-25, (,) (typically negative integer value)
+-->
+<mg_elliptic_solve mg_num_pre="3" mg_num_post="3" mg_num_bottom="3" mg_v_or_w="v" mg_max_iterations="100" mg_epsilon="-12" mg_hang="-10" mg_norm_threshold="-15"/>
+<mg_parabolic_solve mg_num_pre="3" mg_num_post="3" mg_num_bottom="3" mg_v_or_w="v" mg_max_iterations="50" mg_epsilon="-12" mg_hang="-10" mg_norm_threshold="-15"/>
+
+<!-- ode_solve, configuration parameters to solve ODEs, optional
+	epsilon: relative error tolerance=1.0^epsilon, this code cannot ensure the requested accuracy if epsilon is smaller than -9, optional, integer, default=-6, (,-1]
+	threshold: if the absolute value of solution is larger than 1.0^threshold, the relative error is controlled, otherwise absolute error (epsilon * threshold) is controlled, optional, integer, default=-9, (,) (typically negative integer value)
+-->
+<ode_solve epsilon="-6" threshold="-9"/>
+
+</optional>
+
+</biocellion>
+
