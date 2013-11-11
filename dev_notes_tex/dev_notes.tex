@@ -10,7 +10,7 @@
 
 
 % Article top matter
-\title{yease\_MFC Developer Notes} %\LaTeX is a macro for printing the Latex logo
+\title{yeast\_MFC Developer Notes} %\LaTeX is a macro for printing the Latex logo
 \author{Ryan Tasseff, \texttt{rtasseff@systemsbiolgy.org}}  %\texttt formats the text to a typewriter style font
 \date{\today}  %\today is replaced with the current date
 
@@ -35,12 +35,12 @@ The document is dynamic will will change and the project progresses. \end{abstra
 Here we will cover the development of the yeast microfludic chip model,
 using the Biocellion framework.
 The primary goal of the model is to capture the behavior of 
-budding yeast and the surrounding environment in a chip designed 
+budding yeast and the surrounding environment in a chip  
 designed to trap single yeast cells for time laps imaging.
 Specifically, we wish to model simple aspect of yeast: 
 movement, budding/ division, death and nutrient uptake.
 We also want to capture the diffusion and (if needed) the 
-convection/ advection of key molecule, 
+convection/ advection of key molecules, 
 to model there spatial distribution over time.
 
 The following is a rough guide to how the model was/ is being developed.
@@ -49,6 +49,81 @@ we will attempt to organize first by specific model components,
 then by relevant biology/ function and finally by date (time stamp on all additions).
 To some extent, we will leave deprecated code/ descriptions
 in the notes; however, we will try to mark them as deprecated.
+
+\section{General Assumptions, Simplifications, Details}
+\subsection{Growth and Division}
+\emph{20131111} We are assuming a simple model of growth, division and cell cycle control\cite{Charvin2009}.
+The primary assumptions are 1) exponential growth of cells
+2) perfect volume control,
+the cells do not start a clock until some $V_C$ is reached;
+2b) all additional volume will be transfered to daughter;
+3) linear progression through cell cycle;
+3b) completely deterministic mitosis, 
+the cell finishes division after clock hits 1.
+Currently, we have added some additional simplification and assumptions:
+1) cells do not bud they just grow and divide end of cycle,
+this will be improved by forming a junction with m and d cells after g1, 
+which will break after cycle ends,
+unfortunately it may be trick to implement exp vol increase in d based on m vol;
+2) budding is always at same spot so we will track it,
+unfortunately this will not do much until we implement rotation
+
+\subsection{Physical Environment}
+\emph{20131111} Although the model does contain 3 dimensions,
+we will focus only on the first 2 (x,y), 
+and assume movment is restricted in z-axis based on chip size.
+
+\section{Initialization}
+\emph{20130927} We have initialized the model using the PDE example provided in Biocellion.
+
+\section{Model Properties and Definitions}
+The following is a general overview of the various elements on the model.
+Nearly all is defined in model \emph{model\_define.h}.
+
+\subsection{Agent types and properties}
+\emph{20130927} We will add agents under `---Agents---'.
+The primary agent is \texttt{AGENT\_YEAST\_CELL}.
+We also added the initial properties in the same place,
+specifically we have added 2 model reals that describe the 
+location of the budding direction \texttt{YEAST\_CELL\_MODEL\_REAL\_BUD\_DIR\_}.
+\emph{20130927} The property \texttt{YEAST\_CELL\_MODEL\_REAL\_CC\_CLOCK}
+was added to monitor progression through the cell cycle \cite{Charvin2009}
+Additional cell properties added under `---Cell Properties--- including 
+`-Growth and Division-' properties taken from \cite{Charvin2009} to describe the cell cycle.
+
+\section{Agent Rules}
+\emph{20131111} Rules defined in \emph{model\_routine\_agent.cpp} unless otherwise stated.
+
+\subsection{updateSpAgent}
+\emph{20131111} We define growth here.  
+Currently, we have deterministic exponential volume increase.
+Which is achieved by simple steps.  
+We have added the growth here as we may wish to couple it to the environment via uptake.
+
+\subsection{updateSpAgentBirthDeath }
+\emph{20131111} We are doing all division at a single step,
+as opposed to a bud.
+So when cell cycle is complete we allow the cells to divide.
+Based on \cite{Charvin2009} cell cycle is complete after the clock reaches 1.0.
+The limit is defined in \emph{model\_define.h} as \texttt{CC\_CLOCK\_CRITICAL}.
+We note that the phase is tracked as an internal variable \texttt{YEAST\_CELL\_MODEL\_REAL\_CC\_CLOCK}
+
+\subsection{adjustSpAgentState}
+\emph{20131111} Here have track movement through the cell cycle by linearly increasing the phase varriable under ` ---Cell Cycle Progression---'.
+We have done this here as it only leads to division, and division is done at the baseline time step, as this module is.
+
+\subsection{divideSpAgent}
+\emph{20131111} Division is done all at once.  
+After the cell cycle is complete this method will be called.
+All volume above the critical volume is sent to the daughter.
+Displacment is done so that both move to account for new radius, 
+and this is in the direction of the budding, defined as a property in \emph{model\_define.h}.
+ 
+
+ 
+
+
+
 
 
 \end{document}  %End of document.
