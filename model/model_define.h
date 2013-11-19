@@ -7,7 +7,13 @@
 
 /* MODEL START */
 
-
+/* --- UNITS:
+time = seconds (sec);
+length = micrometers ($\mu m$);
+volume = cubic micrometers ($\mu m^3$);
+mass = nano grams (ng);
+concentration = $frac\{ng}{\mu m^3}$;
+*/
 
 /* ---Agents--- */
 
@@ -19,14 +25,15 @@ typedef enum _agent_type_e {
 /* ---Difusable elements--- */
 
 typedef enum _diffusible_elem_e {
-	DIFFUSIBLE_ELEM0,
+	DIFFUSIBLE_ELEM_GLUCOSE,
 	NUM_DIFFUSIBLE_ELEMS
 } diffusible_elem_e;
 
 /* ---Grid Properties--- */
 
 typedef enum _grid_model_real_e {
-	GRID_MODEL_REAL_FV_RATIO,
+	GRID_MODEL_REAL_GLUCOSE_DELTA, //=0, total change in glucose for this step
+	GRID_MODEL_REAL_AGENT_VOL,
 	NUM_GRID_MODEL_REALS
 } grid_model_real_e;
 
@@ -36,8 +43,16 @@ typedef enum _yeast_cell_model_real_e {
 	YEAST_CELL_MODEL_REAL_BUD_DIR_X, // = 1, x dir for bud
 	YEAST_CELL_MODEL_REAL_BUD_DIR_Y, // = 0, y dir for bud
 	YEAST_CELL_MODEL_REAL_CC_CLOCK, // = 0, current cell cycle pos
+	YEAST_CELL_MODEL_REAL_ELEM_GLUCOSE_UPTAKE, // = 0, amount of uptake in this step
 	NUM_YEAST_CELL_MODEL_REALS
 } yeast_cell_model_real_e;
+
+
+typedef enum _model_rng_type_e {
+	MODEL_RNG_UNIFORM,
+	NUM_MODEL_RNGS
+} model_rng_type_e;
+
 
 
 /* ---General--- */
@@ -45,16 +60,21 @@ typedef enum _yeast_cell_model_real_e {
 const REAL GEN_PI = 3.14159265359;
 // 4/3 pi
 const REAL GEN_PI43 = (4.0/3.0)*GEN_PI;
+const REAL GEN_SMALL = 1.0E-10;
+const REAL GEN_EPS = 1E-52;
 
 /* ---Grid Properties--- */
-const S32 NUM_AMR_LEVELS = 2;
+const S32 NUM_AMR_LEVELS = 1;
+const S32 NUM_PDE_TIME_STEPS_PER_STATE_AND_GRID_STEP = 1;
+// concentration of elements in the bulk fluid in the flow channel
+const REAL ELEM_BULK_CONCENTRATION[NUM_DIFFUSIBLE_ELEMS] = {2.0e-2}; // ng/um^3
+const REAL ELEM_BETA[NUM_DIFFUSIBLE_ELEMS] = {600}; //um^2/sec
 
 /* ---Cell Properties--- */
-/* -physical properties- */
 
 /* -Growth and Division- */
 // dv/dt = GROWTH_RATE * V, vol double at 84min
-const REAL GROWTH_RATE = 0.0.0001375; // [=] sec^-1, cite Charvin2009 
+const REAL GROWTH_RATE = 0.0001375; // [=] sec^-1, cite Charvin2009 
 // linear rate of cell cycle clock, 
 const REAL CC_CLOCK_RATE = 0.0002347; // [=] sec^-1, cite Charvin2009 
 /* Critical volume maitained by cell, also strts CC clock
@@ -64,14 +84,65 @@ const REAL R_CRITICAL = 2.0; // [=] micro meters
 const REAL VOL_CRITICAL = R_CRITICAL * R_CRITICAL * R_CRITICAL * GEN_PI43; // [=] um^3
 // Reset limit on clock 
 const REAL CC_CLOCK_CRITICAL = 1.0; // cite Charvin2009
+/* -physical properties- */
+// maximum radius we are expecting for yeast cell, 2x volume:
+const REAL CELL_R_MAX = 1.2599*R_CRITICAL;
+// Maximum interaction distance for 2 cells
+const REAL CELL_INTRCT_DIST_MAX = 2.0*CELL_R_MAX;
+// standard uptake of difusable elements 
 
+/* -links to enviornment- */
+const REAL CELL_ELEM_CONSTANT_UPTAKE[NUM_DIFFUSIBLE_ELEMS] = {4.2e-5}; // ng/(sec*cell)
 
 
 /* ---Domain--- */
-const REAL IF_GRID_SPACING = R_CRITICAL * 2.0;/* this should be equal to or larger than MAX_CELL_RADIUS * 2.0, domain size in the xml file = 128 * 128 * 4928 */
+const REAL IF_GRID_SPACING = CELL_INTRCT_DIST_MAX;/* this should be equal to or larger than MAX_CELL_RADIUS * 2.0, domain size in the xml file = 128 * 128 * 4928 */
 const REAL BASELINE_TIME_STEP_DURATION = 100; // sec
 const S32 NUM_STATE_AND_GRID_TIME_STEPS_PER_BASELINE = 10;
-const REAL STATE_AND_GRID_TIME_STEP = BASELINE_TIME_STEP_DURATION / NUM_STATE_AND_GRID_TIME_STEPS_PER_BASELINE;
+const REAL STATE_AND_GRID_TIME_STEP = BASELINE_TIME_STEP_DURATION / ( REAL ) NUM_STATE_AND_GRID_TIME_STEPS_PER_BASELINE;
+// maximum displacement per step
+const REAL MAX_DISP = IF_GRID_SPACING; 
+
+
+/* ---Cell Properties 2--- */
+/* -mechanics- */
+// friction coefficent 
+const REAL CELL_DAMP_COEF = 1.0;
+/* cell stiffness for shoving currently set to disp cells 
+by 1/2 of total disp per step based on single shoving interaction
+*/
+const REAL CELL_STIFF = 0.5 * ( CELL_DAMP_COEF / BASELINE_TIME_STEP_DURATION );
+/* cell wall combine stiffness for shoving when yeast hits wall
+assuming cell is 2 orders more stiff then wall, 
+geometric mixture -> one order less
+*/
+const REAL CELL_WALL_STIFF = CELL_STIFF / 10.0;
+
+
+
+
+/* ---Chip Design---
+A large matrix identifying each UB 
+in the simulation as habitable or not
+assuing flow is at the low and high
+x-axis points.
+Trapping Chip
+11 in x, 15 in Y
+5 by 5 block uninhabitable in each corrner.
+*/
+const S32 UB_NUM[2] = {12,16};
+const S32 CHIP_DESIGN_MATRIX[12][16] =			{{ 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0},
+							{ 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0},
+							{ 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0},
+							{ 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0},
+							{ 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0},
+							{ 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0},
+							{ 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0},
+							{ 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0},
+							{ 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0},
+							{ 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0},
+							{ 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0},
+							{ 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0}};
 
 
 

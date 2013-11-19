@@ -1,7 +1,5 @@
 /* DO NOT USE FUNCTIONS THAT ARE NOT THREAD SAFE (e.g. rand(), use Util::getModelRand() instead) */
 
-#include <math.h>
-
 #include "biocellion.h"
 
 #include "model_routine.h"
@@ -14,20 +12,10 @@
 
 using namespace std;
 
-void ModelRoutine::updateGlobalInfo( Vector<U8>& v_globalData ) {
-	/* MODEL START */
-
-	/* nothing to do */
-
-	/* MODEL END */
-
-	return;
-}
-
 void ModelRoutine::updateIfGridSpacing( REAL& ifGridSpacing ) {
 	/* MODEL START */
 
-	ifGridSpacing = 2.0;
+	ifGridSpacing = IF_GRID_SPACING;
 
 	/* MODEL END */
 
@@ -37,8 +25,10 @@ void ModelRoutine::updateIfGridSpacing( REAL& ifGridSpacing ) {
 void ModelRoutine::updateOptModelRoutineCallInfo( OptModelRoutineCallInfo& callInfo ) {
 	/* MODEL START */
 
-	callInfo.numUpdateIfGridVarPreStateAndGridSteps = 0;
-	callInfo.numUpdateIfGridVarPostStateAndGridSteps = 0;
+	callInfo.numUpdateIfGridVarPreStateAndGridStepRounds = 1;
+	callInfo.numUpdateIfGridVarPostStateAndGridStepRounds = 1;
+//	callInfo.numUpdateIfGridVarPreStateAndGridSteps = 1;
+//	callInfo.numUpdateIfGridVarPostStateAndGridSteps = 1;
 
 	/* MODEL END */
 
@@ -48,11 +38,8 @@ void ModelRoutine::updateOptModelRoutineCallInfo( OptModelRoutineCallInfo& callI
 void ModelRoutine::updateDomainBdryType( domain_bdry_type_e a_domainBdryType[DIMENSION] ) {
 	/* MODEL START */
 
-	CHECK( DIMENSION == 3 );
-
-	for( S32 dim = 0 ; dim < 2 ; dim++ ) {
-		a_domainBdryType[dim] = DOMAIN_BDRY_TYPE_PERIODIC;
-	}
+	a_domainBdryType[0] = DOMAIN_BDRY_TYPE_NONPERIODIC_HARD_WALL;
+	a_domainBdryType[1] = DOMAIN_BDRY_TYPE_NONPERIODIC_HARD_WALL;
 	a_domainBdryType[2] = DOMAIN_BDRY_TYPE_NONPERIODIC_HARD_WALL;
 
 	/* MODEL END */
@@ -73,8 +60,8 @@ void ModelRoutine::updatePDEBufferBdryType( pde_buffer_bdry_type_e& pdeBufferBdr
 void ModelRoutine::updateTimeStepInfo( TimeStepInfo& timeStepInfo ) {
 	/* MODEL START */
 
-	timeStepInfo.durationBaselineTimeStep = 1.0;
-	timeStepInfo.numStateAndGridTimeStepsPerBaseline = 1;
+	timeStepInfo.durationBaselineTimeStep = BASELINE_TIME_STEP_DURATION;
+	timeStepInfo.numStateAndGridTimeStepsPerBaseline = NUM_STATE_AND_GRID_TIME_STEPS_PER_BASELINE;
 
 	/* MODEL END */
 
@@ -84,8 +71,8 @@ void ModelRoutine::updateTimeStepInfo( TimeStepInfo& timeStepInfo ) {
 void ModelRoutine::updateSyncMethod( sync_method_e& extraMechIntrctSyncMethod, sync_method_e& updateIfGridVarSyncMethod/* dummy if both callUpdateIfGridVarPreStateAndGridStep and callUpdateIfGridVarPostStateAndGridStep are set to false in ModelRoutine::updateOptModelRoutineCallInfo */ ) {
 	/* MODEL START */
 
-	extraMechIntrctSyncMethod = SYNC_METHOD_OVERWRITE;
-	updateIfGridVarSyncMethod = SYNC_METHOD_OVERWRITE;
+	extraMechIntrctSyncMethod = SYNC_METHOD_DELTA;
+	updateIfGridVarSyncMethod = SYNC_METHOD_DELTA;
 
 	/* MODEL END */
 
@@ -96,8 +83,24 @@ void ModelRoutine::updateSyncMethod( sync_method_e& extraMechIntrctSyncMethod, s
 void ModelRoutine::updateSpAgentInfo( Vector<SpAgentInfo>& v_spAgentInfo ) {
 	/* MODEL START */
 
-	v_spAgentInfo.clear();
+	CHECK( NUM_AGENT_TYPES == 1 );
 
+	SpAgentInfo info;
+
+	v_spAgentInfo.resize( NUM_AGENT_TYPES );
+
+	info.dMax = CELL_INTRCT_DIST_MAX;
+	info.hasBool = false;
+	info.numBoolVars = 0;
+	info.numStateModelReals = NUM_YEAST_CELL_MODEL_REALS;
+	info.numStateModelInts = 0;
+	info.numExtraMechIntrctModelReals = 0;
+	info.numExtraMechIntrctModelInts = 0;
+	info.v_odeNetInfo.clear();
+
+	v_spAgentInfo[AGENT_YEAST_CELL] = info;
+
+	
 	/* MODEL END */
 
 	return;
@@ -122,24 +125,21 @@ void ModelRoutine::updatePDEInfo( Vector<PDEInfo>& v_pdeInfo ) {
 	PDEInfo pdeInfo;
 	GridPhiInfo gridPhiInfo;
 
+	v_pdeInfo.resize( NUM_DIFFUSIBLE_ELEMS );
+
+	/* stand in element 1 */
+
 	pdeInfo.pdeType = PDE_TYPE_REACTION_DIFFUSION_TIME_DEPENDENT_LINEAR;
 	pdeInfo.numLevels = NUM_AMR_LEVELS;
-	pdeInfo.numTimeSteps = 2;
+	pdeInfo.numTimeSteps = NUM_PDE_TIME_STEPS_PER_STATE_AND_GRID_STEP;
 	pdeInfo.callAdjustRHSTimeDependentLinear = false;
 
-	pdeInfo.advectionInfo.courantNumber = 0.5;/* dummy */
-
-	pdeInfo.splittingInfo.v_diffusionTimeSteps.assign( 1, 1 );/* dummy */
-	pdeInfo.splittingInfo.odeStiff = ODE_STIFF_NORMAL;/* dummy */
-	pdeInfo.splittingInfo.odeH = 0.5;/* dummy */
-	pdeInfo.splittingInfo.odeHm = 0.1;/* dummy */
-
-	gridPhiInfo.elemIdx = DIFFUSIBLE_ELEM0;
-	gridPhiInfo.name = "elem0";
-	gridPhiInfo.aa_bcType[0][0] = BC_TYPE_NEUMANN_CONST;
-	gridPhiInfo.aa_bcVal[0][0] = 0.0;
-	gridPhiInfo.aa_bcType[0][1] = BC_TYPE_NEUMANN_CONST;
-	gridPhiInfo.aa_bcVal[0][1] = 0.0;
+	gridPhiInfo.elemIdx = DIFFUSIBLE_ELEM_GLUCOSE;
+	gridPhiInfo.name = "glucose";
+	gridPhiInfo.aa_bcType[0][0] = BC_TYPE_DIRICHLET_CONST;
+	gridPhiInfo.aa_bcVal[0][0] = ELEM_BULK_CONCENTRATION[DIFFUSIBLE_ELEM_GLUCOSE];
+	gridPhiInfo.aa_bcType[0][1] = BC_TYPE_DIRICHLET_CONST;
+	gridPhiInfo.aa_bcVal[0][1] = ELEM_BULK_CONCENTRATION[DIFFUSIBLE_ELEM_GLUCOSE];
 	gridPhiInfo.aa_bcType[1][0] = BC_TYPE_NEUMANN_CONST;
 	gridPhiInfo.aa_bcVal[1][0] = 0.0;
 	gridPhiInfo.aa_bcType[1][1] = BC_TYPE_NEUMANN_CONST;
@@ -149,14 +149,16 @@ void ModelRoutine::updatePDEInfo( Vector<PDEInfo>& v_pdeInfo ) {
 	gridPhiInfo.aa_bcType[2][1] = BC_TYPE_NEUMANN_CONST;
 	gridPhiInfo.aa_bcVal[2][1] = 0.0;
 
-	gridPhiInfo.minVal = 0.0;
-	gridPhiInfo.setNegToZero = false;
+	gridPhiInfo.minVal = Info::getMGParabolicNormThreshold() * -1.0;
+	gridPhiInfo.setNegToZero = true;
 	gridPhiInfo.printSummary = true;
 	gridPhiInfo.summaryType = SUMMARY_TYPE_SUM;
-	gridPhiInfo.fileOutput = false;
+	gridPhiInfo.fileOutput = true;
 
 	pdeInfo.v_gridPhiInfo.assign( 1, gridPhiInfo );
-	v_pdeInfo.push_back( pdeInfo );
+
+	v_pdeInfo[DIFFUSIBLE_ELEM_GLUCOSE] = pdeInfo;
+
 
 	/* MODEL END */
 
@@ -166,14 +168,23 @@ void ModelRoutine::updatePDEInfo( Vector<PDEInfo>& v_pdeInfo ) {
 void ModelRoutine::updateIfGridModelVarInfo( Vector<IfGridModelVarInfo>& v_ifGridModelRealInfo, Vector<IfGridModelVarInfo>& v_ifGridModelIntInfo ) {
 	/* MODEL START */
 
-	IfGridModelVarInfo gridModelVarInfo;
+	CHECK( NUM_GRID_MODEL_REALS == 2 );
 
-	gridModelVarInfo.name = "free_vol_ratio";
-	gridModelVarInfo.printSummary = false;
-	gridModelVarInfo.summaryType = SUMMARY_TYPE_AVG;/* dummy */
+	IfGridModelVarInfo info;
 
-	v_ifGridModelRealInfo.clear();
-	v_ifGridModelRealInfo.push_back( gridModelVarInfo );
+	v_ifGridModelRealInfo.resize( NUM_GRID_MODEL_REALS );
+
+	info.name = "glucose_delta";
+	info.printSummary = false;
+	info.summaryType = SUMMARY_TYPE_SUM;/* dummy */
+
+	v_ifGridModelRealInfo[GRID_MODEL_REAL_GLUCOSE_DELTA] = info;
+
+	info.name = "agent_volume";
+	info.printSummary = true;
+	info.summaryType = SUMMARY_TYPE_SUM;
+
+	v_ifGridModelRealInfo[GRID_MODEL_REAL_AGENT_VOL] = info;
 
 	v_ifGridModelIntInfo.clear();
 
@@ -185,7 +196,28 @@ void ModelRoutine::updateIfGridModelVarInfo( Vector<IfGridModelVarInfo>& v_ifGri
 void ModelRoutine::updateRNGInfo( Vector<RNGInfo>& v_rngInfo ) {
 	/* MODEL START */
 
-	v_rngInfo.clear();
+	CHECK( NUM_MODEL_RNGS == 1 );
+
+	v_rngInfo.resize( 1 );
+
+	RNGInfo rngInfo;
+
+	rngInfo.type = RNG_TYPE_UNIFORM;
+	rngInfo.param0 = 0.0;
+	rngInfo.param1 = 1.0;
+	rngInfo.param2 = 0.0;/* dummy */
+
+	v_rngInfo[MODEL_RNG_UNIFORM] = rngInfo;
+
+	/* MODEL END */
+
+	return;
+}
+
+void ModelRoutine::updateGlobalData( Vector<U8>& v_globalData ) {
+	/* MODEL START */
+
+	/* nothing to do */
 
 	/* MODEL END */
 
@@ -216,7 +248,6 @@ void ModelRoutine::setPDEBuffer( const VIdx& startVIdx, const VIdx& regionSize, 
 	/* MODEL START */
 
 	isPDEBuffer = false;
-
 	/* MODEL END */
 
 	return;
@@ -225,10 +256,30 @@ void ModelRoutine::setPDEBuffer( const VIdx& startVIdx, const VIdx& regionSize, 
 void ModelRoutine::setHabitable( const VIdx& vIdx, BOOL& isHabitable ) {
 	/* MODEL START */
 
-	isHabitable = true;
+
+	CHECK( Info::getDomainSize( 0 ) == UB_NUM[0] );
+	CHECK( Info::getDomainSize( 1 ) == UB_NUM[1] );
+
+	/* us the predefined chip matrix to 
+	test if this in habitable
+	*/
+	if ( vIdx[2] > 0 ) {
+		 isHabitable = false;
+	}
+	else if ( CHIP_DESIGN_MATRIX[vIdx[0]][vIdx[1]] == 0 ){
+		isHabitable = false;
+	}
+	else if ( CHIP_DESIGN_MATRIX[vIdx[0]][vIdx[1]] == 1 ) {
+		isHabitable = true;
+	}
+	else {
+		ERROR("unknown int in chip design matrix")
+	}
+
 
 	/* MODEL END */
 
 	return;
 }
+
 

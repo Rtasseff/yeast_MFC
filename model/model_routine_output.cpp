@@ -17,8 +17,9 @@ using namespace std;
 #if HAS_SPAGENT
 void ModelRoutine::updateSpAgentOutput( const VIdx& vIdx, const SpAgent& spAgent, REAL& color, Vector<REAL>& v_extra ) {
 	/* MODEL START */
-
-	ERROR( "unimplemented." );
+	
+	color = spAgent.state.getType();
+	CHECK( v_extra.size() == 0 );
 
 	/* MODEL END */
 
