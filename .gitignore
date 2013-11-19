@@ -1,11 +1,15 @@
 # extra stuff
 output/*
+movies/*
 
 # tex
 *.aux
 *.dvi
 *.log
 *.pdf
+*.bbl
+*.blg
+*.bak
 
 *.py[cod]
 
