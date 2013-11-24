@@ -21,7 +21,6 @@ void ModelRoutine::addSpAgents( const BOOL init, const VIdx& startVIdx, const VI
 	/* MODEL START */
 
 	if( init == true ) {
-		/* place cells on top of skin */
 		if ( startVIdx[2] == 0 && startVIdx[1] <= 7 && (startVIdx[1]+ regionSize[1]) >= 7 && startVIdx[0] <= 5 && (startVIdx[0]+ regionSize[0]) >= 5 ) {
 			VIdx posVIdx;
 			VReal posOffset;
@@ -73,25 +72,17 @@ void ModelRoutine::updateSpAgentState( const VIdx& vIdx, const AgentJunctionInfo
 
 		REAL R0 = state.getRadius();
 		REAL V0 = GEN_PI43 * R0 * R0 * R0;
-		BOOL hasGlucose;
+		BOOL hasGlucose = false;
 
 
 		/* ---Nutriant Uptake--- 
-		Determine total uptake for cell,
-		Determine total amount in grid,
-		if we have enough, take it.
+		Uptake calculated at grid,
+		check if enough was avalible:
 		*/
-		REAL glucoseUptake = CELL_ELEM_CONSTANT_UPTAKE[DIFFUSIBLE_ELEM_GLUCOSE] * STATE_AND_GRID_TIME_STEP; //ng uptake for this cell
-		REAL glucoseGrid = v_gridPhiNbrBox[DIFFUSIBLE_ELEM_GLUCOSE].getVal(0,0,0) * IF_GRID_SPACING * IF_GRID_SPACING *IF_GRID_SPACING; // ng in UB
-		if ( glucoseGrid >= glucoseUptake ){
+		if ( v_gridModelIntNbrBox[GRID_MODEL_INT_GLUCOSE_AVAILABLE].getVal( 0, 0, 0) == 1 ){
 			//cell uptakes the stuff
-			state.setModelReal( YEAST_CELL_MODEL_REAL_ELEM_GLUCOSE_UPTAKE, glucoseUptake);
 			hasGlucose = true;
-		} else {
-			state.setModelReal( YEAST_CELL_MODEL_REAL_ELEM_GLUCOSE_UPTAKE, 0);
-			hasGlucose = false;
 		}
-
 
 		/* ---Growth--- 
 		Assuming exponential growth
@@ -300,9 +291,8 @@ void ModelRoutine::divideSpAgent( const VIdx& vIdx, const AgentJunctionInfo& jun
 	daughterDisp[2] = 0.0;
 
 	// set up state
-	CHECK( NUM_YEAST_CELL_MODEL_REALS==4 );
+	CHECK( NUM_YEAST_CELL_MODEL_REALS==3 );
 	daughterState.setModelReal( YEAST_CELL_MODEL_REAL_CC_CLOCK, 0.0 );
-	daughterState.setModelReal( YEAST_CELL_MODEL_REAL_ELEM_GLUCOSE_UPTAKE, 0.0 );
 
 	/* Random budding dir in the x,y plane */
 	REAL scale;

@@ -186,7 +186,17 @@ void ModelRoutine::updateIfGridModelVarInfo( Vector<IfGridModelVarInfo>& v_ifGri
 
 	v_ifGridModelRealInfo[GRID_MODEL_REAL_AGENT_VOL] = info;
 
-	v_ifGridModelIntInfo.clear();
+
+	CHECK( NUM_GRID_MODEL_INTS == 1 );
+
+
+	v_ifGridModelIntInfo.resize( NUM_GRID_MODEL_INTS );
+
+	info.name = "glucose_avalible";
+	info.printSummary = false;
+	info.summaryType = SUMMARY_TYPE_SUM;/* dummy */
+
+	v_ifGridModelIntInfo[GRID_MODEL_INT_GLUCOSE_AVAILABLE] = info;
 
 	/* MODEL END */
 

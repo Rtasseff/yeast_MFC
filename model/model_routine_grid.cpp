@@ -13,9 +13,12 @@ void ModelRoutine::initIfGridVar( const VIdx& vIdx, const UBAgentData& ubAgentDa
 
 	CHECK( NUM_DIFFUSIBLE_ELEMS == 1 );
 	CHECK( NUM_GRID_MODEL_REALS == 2 );
+	CHECK( NUM_GRID_MODEL_INTS == 1 );
 
 	v_gridModelReal[GRID_MODEL_REAL_GLUCOSE_DELTA] = 0.0;
 	v_gridModelReal[GRID_MODEL_REAL_AGENT_VOL] = 0.0;
+
+	v_gridModelInt[GRID_MODEL_INT_GLUCOSE_AVAILABLE] = 0;
 	
 	if (CHIP_DESIGN_MATRIX[vIdx[0]][vIdx[1]]==1 && vIdx[2]==0){
 		v_gridPhi[DIFFUSIBLE_ELEM_GLUCOSE] = ELEM_BULK_CONCENTRATION[DIFFUSIBLE_ELEM_GLUCOSE];
@@ -37,27 +40,51 @@ void ModelRoutine::updateIfGridVar( const BOOL pre, const S32 round, const VIdx&
 	// only have one round set
 	CHECK( round == 0 );
 
-	// onle z=0 is real, others are dummies
-	if( vIdx[2]==0 ){
+	// only z=0 is real, others are dummies
+	if( CHIP_DESIGN_MATRIX[vIdx[0]][vIdx[1]]==1 && vIdx[2] == 0 ){
 		if( pre == true ) {
 			/* ---Agent Uptake--- 
 			Only glucose, amount listed in model real,
 			add up the total amount taken in this step
 			*/
 
-			REAL glucoseTotalDelta = 0;
-			
+			REAL glucoseEstUptake = 0;
+			REAL glucoseTotal =  v_gridPhiNbrBox[DIFFUSIBLE_ELEM_GLUCOSE].getVal( 0, 0, 0 ) * IF_GRID_SPACING * IF_GRID_SPACING *IF_GRID_SPACING; // ng in UB
+
 			const UBAgentData& ubAgentData = *( ubAgentDataPtrNbrBox.getVal( 0, 0, 0 ) );
+
+			/* ---Uptake--- */
+			
+			/* -Uptake Estimate-
+			estimate the total amount of elem to be taken up by cells.
+			*/
 			for( S32 i = 0 ; i < ( S32 )ubAgentData.v_spAgent.size() ; i++ ) {
 				const SpAgentState& state = ubAgentData.v_spAgent[i].state;
 				if ( state.getType() == AGENT_YEAST_CELL  ){
-					// note cells are taking out of grid, consuming 
-					glucoseTotalDelta -= state.getModelReal( YEAST_CELL_MODEL_REAL_ELEM_GLUCOSE_UPTAKE );
+					glucoseEstUptake += CELL_ELEM_CONSTANT_UPTAKE[DIFFUSIBLE_ELEM_GLUCOSE] * STATE_AND_GRID_TIME_STEP; //ng uptake for this cell
 				}
 			}
-			/* well we are going to set it, assuming nothing else will change it */
-			v_gridModelRealNbrBox[GRID_MODEL_REAL_GLUCOSE_DELTA].setVal( 0, 0, 0, glucoseTotalDelta );
-			
+
+			/* -Uptake Decision- 
+			We have a simple uptake rule, if there is enough take it,
+			comunicate this to cell and allow growth;
+			otherwise do nothing 
+			check if we have enough:
+			*/
+			if ( glucoseEstUptake < glucoseTotal){
+				// indicate that cell uptake was sucessfull in this grid:
+				v_gridModelIntNbrBox[GRID_MODEL_INT_GLUCOSE_AVAILABLE].setVal( 0, 0, 0, 1 );
+				v_gridModelRealNbrBox[GRID_MODEL_REAL_GLUCOSE_DELTA].setVal( 0, 0, 0, -1 * glucoseEstUptake );
+				cout <<glucoseEstUptake<<endl;
+			}
+			else {
+				// indicate that cell uptake is not possible in this grid:
+				v_gridModelIntNbrBox[GRID_MODEL_INT_GLUCOSE_AVAILABLE].setVal( 0, 0, 0, 0 );
+				v_gridModelRealNbrBox[GRID_MODEL_REAL_GLUCOSE_DELTA].setVal( 0, 0, 0, 0.0 );
+				cout <<"glucose uptake not possible for this grid!" <<endl;
+			}
+
+
 		}
 		else { /* post */
 			/* calculate cell volume */
@@ -97,12 +124,12 @@ void ModelRoutine::updateIfGridKappa( const VIdx& vIdx, const UBAgentData& ubAge
 		REAL volUB = IF_GRID_SPACING * IF_GRID_SPACING * IF_GRID_SPACING;
 		REAL tmpKappa = ( volUB - v_gridModelReal[GRID_MODEL_REAL_AGENT_VOL] ) / volUB ;
 		
-		if ( tmpKappa > GEN_SMALL ) {
+		if ( tmpKappa > KAPPA_MIN ) {
 			gridKappa = tmpKappa;
 		}
 		else {
-			gridKappa = GEN_SMALL;
-			cout <<"WARNING:MRG_UIGK_0001 - Kappa was calculated as negative." <<endl;
+			gridKappa = KAPPA_MIN;
+			//cout <<"WARNING:MRG_UIGK_0001 - Kappa was calculated as negative." <<endl;
 		}
 
 	}
@@ -135,13 +162,43 @@ void ModelRoutine::updateIfGridBetaInIfRegion( const S32 elemIdx, const S32 dim,
 	CHECK( vIdx1Tmp == vIdx1 );
 
 	/* set to defulat */
-	gridBeta = ELEM_BETA[elemIdx];
+	gridBeta = 0;
 
-	/* using the desing matrix to check if we are at a wall (no diffusion in z)*/
-	if ( CHIP_DESIGN_MATRIX[vIdx0[0]][vIdx0[1]] == 0 || CHIP_DESIGN_MATRIX[vIdx1[0]][vIdx1[1]] == 0 || vIdx0[2] > 0 || vIdx1[2] > 0 ) {
-		// no diffusion at chip wall
-		gridBeta = 0;
-	}
+	
+
+	/* using the desing matrix to check if we are not at a wall (no diffusion in z)*/
+	if ( CHIP_DESIGN_MATRIX[vIdx0[0]][vIdx0[1]] == 1 && CHIP_DESIGN_MATRIX[vIdx1[0]][vIdx1[1]] == 1 && vIdx0[2] == 0 && vIdx1[2] == 0 ) {
+		REAL gridBeta0;
+		REAL gridBeta1;
+		REAL volUB = IF_GRID_SPACING * IF_GRID_SPACING * IF_GRID_SPACING;
+		REAL scale; 
+
+		/* set an Effective Difussion 
+		this will compensate for reduced flux area 
+		due to cells blocking the area.
+		*/
+		scale = ( volUB - v_gridModelReal0[GRID_MODEL_REAL_AGENT_VOL] ) / volUB ;
+		if ( scale < 0 ) {
+			scale = 0.0;
+		}
+		gridBeta0 = ELEM_BETA[elemIdx] * scale;
+
+		scale = ( volUB - v_gridModelReal1[GRID_MODEL_REAL_AGENT_VOL] ) / volUB ;
+		if ( scale < 0 ) {
+			scale = 0.0;
+		}
+		gridBeta1 = ELEM_BETA[elemIdx] * scale;
+
+		if( ( gridBeta0 > GEN_SMALL ) && ( gridBeta1 > GEN_SMALL ) ) {
+			gridBeta = 1.0 / ( ( 1.0 / gridBeta0 + 1.0 / gridBeta1 ) * 0.5 );/* harmonic mean */
+		}
+		else {
+			// diffusion is effectivly not occuring 
+			gridBeta = GEN_SMALL;
+		}
+
+
+	} // <-- in chip habitable volume
 
 
 
@@ -165,13 +222,22 @@ void ModelRoutine::updateIfGridBetaDomainBdry( const S32 elemIdx, const S32 dim,
 	/* set defualt as zero */
 	gridBeta = 0;
 
-	// check if dummy region
-	if ( vIdx[2] == 0 ) {
-		/* look to see if we are at the flow channel */
-		if ( dim == 0 && CHIP_DESIGN_MATRIX[vIdx[0]][vIdx[1]] == 1 ) {
-			gridBeta = ELEM_BETA[elemIdx];
+	/* look to see if we are at the flow channel */
+	if ( dim == 0 && CHIP_DESIGN_MATRIX[vIdx[0]][vIdx[1]] == 1 && vIdx[2] == 0 ) {
+		/* account for reduced area for flux due to cells.
+		The wall always has scale = 1, 
+		use harmonic mean here to account for scale of this UB with wall:
+		*/
+		REAL volUB = IF_GRID_SPACING * IF_GRID_SPACING * IF_GRID_SPACING;
+		REAL scale = ( volUB - v_gridModelReal[GRID_MODEL_REAL_AGENT_VOL] ) / volUB ;
+		if ( scale < GEN_SMALL ) {
+			gridBeta = GEN_SMALL;
+		}
+		else {
+			gridBeta = ( 2 * ELEM_BETA[elemIdx] ) / ( ( 1.0 / scale ) + 1.0 );
 		}
 	}
+
 
 	/* MODEL END */
 
@@ -213,21 +279,29 @@ void ModelRoutine::updateIfGridRHSLinear( const S32 elemIdx, const VIdx& vIdx, c
 
 	/* Given total change over this step, calulate source term
 	mass/(vol time)
-	DO NOT ALLOW NEGATIVVE
 	*/
 	CHECK( NUM_DIFFUSIBLE_ELEMS == 1 );
 
 	REAL total =  v_gridPhi[DIFFUSIBLE_ELEM_GLUCOSE] * IF_GRID_SPACING * IF_GRID_SPACING *IF_GRID_SPACING; // ng in UB
 	REAL delta = v_gridModelReal[GRID_MODEL_REAL_GLUCOSE_DELTA];
 
-	/* well we are going to set it, assuming nothing else will change it */
-	if ( ( total + delta ) < 0 ) {
-		// taking all of the glucose
-		delta = -1.0 * total;
-		cout <<"WARNING:MRG_UIGRHSL_0002 - Taking too much glucose, correcting." <<endl;
-	}
+	if ( delta > GEN_SMALL ) {
 
-	gridRHS = delta / ( IF_GRID_SPACING * IF_GRID_SPACING * IF_GRID_SPACING * STATE_AND_GRID_TIME_STEP );
+		/* estimate if too much */
+		if ( ( total + delta ) < GEN_SMALL ) {
+			// taking all of the glucose
+			delta = -1.0 * total + GEN_SMALL;
+			if ( WRITE_WARNING == 1 ){
+				cout <<"WARNING:MRG_UIGRHSL_0002 - Taking too much glucose, correcting." <<endl;
+			}
+		}
+
+		gridRHS = delta / ( IF_GRID_SPACING * IF_GRID_SPACING * IF_GRID_SPACING * STATE_AND_GRID_TIME_STEP );
+
+	}
+	else {
+		gridRHS = 0.0;
+	}
 
 	/* MODEL END */
 
@@ -412,4 +486,5 @@ void ModelRoutine::updatePDEBufferNeumannBCVal( const S32 elemIdx, const VReal& 
 
 	return;
 }
+
 

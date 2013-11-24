@@ -32,10 +32,15 @@ typedef enum _diffusible_elem_e {
 /* ---Grid Properties--- */
 
 typedef enum _grid_model_real_e {
-	GRID_MODEL_REAL_GLUCOSE_DELTA, //=0, total change in glucose for this step
+	GRID_MODEL_REAL_GLUCOSE_DELTA, // amount of glucose change in grid
 	GRID_MODEL_REAL_AGENT_VOL,
 	NUM_GRID_MODEL_REALS
 } grid_model_real_e;
+
+typedef enum _grid_model_int_e {
+	GRID_MODEL_INT_GLUCOSE_AVAILABLE,  // is there enough glucose in this grid for uptake.
+	NUM_GRID_MODEL_INTS
+} grid_model_int_e;
 
 /* ---YEAST_CELL properties--- */
 
@@ -43,7 +48,6 @@ typedef enum _yeast_cell_model_real_e {
 	YEAST_CELL_MODEL_REAL_BUD_DIR_X, // = 1, x dir for bud
 	YEAST_CELL_MODEL_REAL_BUD_DIR_Y, // = 0, y dir for bud
 	YEAST_CELL_MODEL_REAL_CC_CLOCK, // = 0, current cell cycle pos
-	YEAST_CELL_MODEL_REAL_ELEM_GLUCOSE_UPTAKE, // = 0, amount of uptake in this step
 	NUM_YEAST_CELL_MODEL_REALS
 } yeast_cell_model_real_e;
 
@@ -62,13 +66,14 @@ const REAL GEN_PI = 3.14159265359;
 const REAL GEN_PI43 = (4.0/3.0)*GEN_PI;
 const REAL GEN_SMALL = 1.0E-10;
 const REAL GEN_EPS = 1E-52;
+const S32 WRITE_WARNING = 1; // set to one to write modeling warnings, set to 0 to ignore.
 
-/* ---Grid Properties--- */
-const S32 NUM_AMR_LEVELS = 1;
-const S32 NUM_PDE_TIME_STEPS_PER_STATE_AND_GRID_STEP = 1;
+
+/* ---Diffusion--- */
 // concentration of elements in the bulk fluid in the flow channel
 const REAL ELEM_BULK_CONCENTRATION[NUM_DIFFUSIBLE_ELEMS] = {2.0e-2}; // ng/um^3
 const REAL ELEM_BETA[NUM_DIFFUSIBLE_ELEMS] = {600}; //um^2/sec
+const REAL KAPPA_MIN = 0.1; // minimum kappa
 
 /* ---Cell Properties--- */
 
@@ -102,6 +107,9 @@ const S32 NUM_STATE_AND_GRID_TIME_STEPS_PER_BASELINE = 10;
 const REAL STATE_AND_GRID_TIME_STEP = BASELINE_TIME_STEP_DURATION / ( REAL ) NUM_STATE_AND_GRID_TIME_STEPS_PER_BASELINE;
 // maximum displacement per step
 const REAL MAX_DISP = IF_GRID_SPACING; 
+/* -Grid Properties- */
+const S32 NUM_AMR_LEVELS = 1;
+const S32 NUM_PDE_TIME_STEPS_PER_STATE_AND_GRID_STEP = 1;
 
 
 /* ---Cell Properties 2--- */
