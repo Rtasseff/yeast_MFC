@@ -108,6 +108,18 @@ Estimates were provided by Gilles Lab to be an uptake of
 $2.5E-12 \frac{g}{min*cell}$ which comes out to 4.2E-5 $\frac{ng}{sec*cell}$.
 The bulk concentration in the flow channel is $20\frac{g}{L}$ which comes to 2E-2 $frac\{ng}{\mu m^3}$.
 
+\subsection{Diffusion}
+Currently we are assuming that only diffusion exists for transport of species in the enviornment.
+This should be close to true in the channel, as the low rynolds number should prevent advection due to flow at the boundry.
+The model calculates flux as so:
+\begin{equation}
+J = D ( \frac{\phi_0}{\kappa_0} - \frac{\phi_1}{\kappa_1} ) \frac{1}{h}
+\label{EQ:diff}
+\end{equation}
+
+We will set diffusion coeffcents to zero at walls of the chip,
+and we will use dirchlet (constant concentration) boundry conditions for the flow channel.
+
 
 
 \subsection{Mechanical Forces and Interactions}
@@ -123,7 +135,6 @@ Displacement will be calculated based on an overdamped system:
 where $c$ is the friction coefficient and $F$ is the force, the dot denotes change with respect to time.
 Here a simple finite difference model is used to calculate delta x.
    
-
  
 
 
@@ -180,6 +191,8 @@ and we can reduce the maximum size and the grid spaces will also reduce.
 
 Design of the domain is given by \texttt{CHIP\_DESIGN\_MATRIX}, 
 entries are zero and one.
+One indicates a habitable region, only z=0 is habbitable.
+
 
 
 
@@ -228,6 +241,74 @@ Rules defined in \textit{model\_routine\_mech\_intrct.cpp} unless otherwise stat
 Shoving is basically like the positive potnetail part of the spring potential,
 The spring constant is the cell stiffness \texttt{CELL\_STIFF}, 
 which defined in \textit{model\_define.h} and set to allow 50\% of total disp from shoving.
+
+
+\section{Grid Updates and Init}
+Rules defined in \textit{model\_routine\_grid.cpp} unless otherwise stated.
+
+\emph{20131122} 
+\subsection{initIfGridVar}
+Initialize all properties at zero.
+
+\subsection{updateIfGridVar}
+Uptake of nutriants is done here. 
+The stratagy is to go through all cells and identify the total amount they have used in a grid varriable \texttt{GRID\_MODEL\_REAL\_GLUCOSE\_DELTA}.
+This will be passed to the section that updates the RHS or source term.
+Note that what the sign is opposite from the agent varriable, \texttt{GRID\_MODEL\_REAL\_GLUCOSE\_DELTA}, 
+to the agent from the environment.
+
+Here we add up the agent volume in this grid.
+This is then stored in \texttt{GRID\_MODEL\_REAL\_AGENT\_VOL} for latter use.
+
+\subsection{updateIfGridKappa}
+
+
+The model tracks the concentration as the amount (conserved quantity) over the volume of the UB.
+However, the actuall volume accessable can be reduced by cells, 
+so that the effective concentration (for the same ammount) is higher.
+Here we are using mass as the conserved quantity, specifically for glucose,
+and we need to correct the concentrations used in calcualting the flux based on the excluded cell volume.
+Here we use \texttt{GRID\_MODEL\_REAL\_AGENT\_VOL}, set above, 
+to calculate the correction factor.
+This will be set the $\kappa_i$ in eq \ref{EQ:diff}.
+We will limit this to 0.01 defined by \texttt{KAPPA\_MIN}.
+Very small values cause huges changes in flux and are not advised.
+We note that currently all the volume of an agent is assumed to be excluded from the UB that contains the agent's center.
+We do not calculate the volume in neighbor UBs, so its possible to take up more volume then the UB has.
+
+\subsection{updateIfGridBetaInIfRegion and updateIfGridBetaDomainBdry}
+Here we set the diffusion coeffcient for each grid interface.
+To prevent diffusion into the uninhabtable area, 
+we only assing non zero diffusion to interfaces between 2 habbitable UBs.
+
+Here we also calculate an effective diffusion.
+In eq \ref{EQ:diff} we see that the flux is calclated based on model params;
+however, the amount of conserved quantity (in this case mass) that is transfered is calculated using the full avalible area: $J*h^2$.
+The area for flux may be reduced, excluded, due to cells in the way.
+We cannot change the area used to calcualte transfer,
+but we can modify $D$ to equivlantly compensate for reduced area.
+To do this we scale $D$ by the amount fraction of volume avalible.
+This is done for each UB seperatly, and the harmonic mean,
+as suggested by SK, was used to combine them for the $D$ at the interface.
+
+A similar stratagy was used at the boundries modeling the flow channel.
+Here we have dirchlet boundry conditions on all x walls,
+and in this mehtod we set all diffusion at boundries to 0, except 
+in x directions AND when we are at a habbitable, non chip wall, area.
+ 
+All other betas are set to zero!
+
+\subsection{updateIfGridRHSLinear)
+Here is where we update the source term for the grid UB.
+This is the chance we have to complete the cell uptake.
+Using the previously, \textit{updateIfGridVar}, set variable, \texttt{GRID\_MODEL\_REAL\_GLUCOSE\_DELTA}.  
+First we consider how much was taken from this grid UB, 
+if it was too much then we screwed up, but we cannot fix that now,
+so just set it to take everything from the box.
+Note that a warning can be printed when this happens, 
+to fix the issue of taking to much use smaller grid state step sizes.
+When removing the mass, it is done continuously while the PDE is solved,
+this means we need to calclate the source term, which is change/ (volume * time step ).
 
 
 
