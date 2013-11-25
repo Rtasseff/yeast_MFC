@@ -75,7 +75,7 @@ void ModelRoutine::updateIfGridVar( const BOOL pre, const S32 round, const VIdx&
 				// indicate that cell uptake was sucessfull in this grid:
 				v_gridModelIntNbrBox[GRID_MODEL_INT_GLUCOSE_AVAILABLE].setVal( 0, 0, 0, 1 );
 				v_gridModelRealNbrBox[GRID_MODEL_REAL_GLUCOSE_DELTA].setVal( 0, 0, 0, -1 * glucoseEstUptake );
-				cout <<glucoseEstUptake<<endl;
+				//cout <<glucoseEstUptake<<endl;
 			}
 			else {
 				// indicate that cell uptake is not possible in this grid:
@@ -194,7 +194,10 @@ void ModelRoutine::updateIfGridBetaInIfRegion( const S32 elemIdx, const S32 dim,
 		}
 		else {
 			// diffusion is effectivly not occuring 
-			gridBeta = GEN_SMALL;
+			gridBeta = BETA_MIN_SCALE * ELEM_BETA[elemIdx];
+		}
+		if (gridBeta< ( BETA_MIN_SCALE * ELEM_BETA[elemIdx] ) ) {
+			gridBeta = BETA_MIN_SCALE * ELEM_BETA[elemIdx];
 		}
 
 
@@ -231,10 +234,13 @@ void ModelRoutine::updateIfGridBetaDomainBdry( const S32 elemIdx, const S32 dim,
 		REAL volUB = IF_GRID_SPACING * IF_GRID_SPACING * IF_GRID_SPACING;
 		REAL scale = ( volUB - v_gridModelReal[GRID_MODEL_REAL_AGENT_VOL] ) / volUB ;
 		if ( scale < GEN_SMALL ) {
-			gridBeta = GEN_SMALL;
+			gridBeta = gridBeta = BETA_MIN_SCALE * ELEM_BETA[elemIdx];
 		}
 		else {
 			gridBeta = ( 2 * ELEM_BETA[elemIdx] ) / ( ( 1.0 / scale ) + 1.0 );
+			if (gridBeta< ( BETA_MIN_SCALE * ELEM_BETA[elemIdx] ) ) {
+				gridBeta = BETA_MIN_SCALE * ELEM_BETA[elemIdx];
+			}
 		}
 	}
 

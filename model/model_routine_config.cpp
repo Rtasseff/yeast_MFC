@@ -93,8 +93,8 @@ void ModelRoutine::updateSpAgentInfo( Vector<SpAgentInfo>& v_spAgentInfo ) {
 	info.hasBool = false;
 	info.numBoolVars = 0;
 	info.numStateModelReals = NUM_YEAST_CELL_MODEL_REALS;
-	info.numStateModelInts = 0;
-	info.numExtraMechIntrctModelReals = 0;
+	info.numStateModelInts = NUM_YEAST_CELL_MODEL_INTS;
+	info.numExtraMechIntrctModelReals = NUM_EXTRA_MECH_YEAST_CELL_MODEL_REALS;
 	info.numExtraMechIntrctModelInts = 0;
 	info.v_odeNetInfo.clear();
 
@@ -110,7 +110,18 @@ void ModelRoutine::updateSpAgentInfo( Vector<SpAgentInfo>& v_spAgentInfo ) {
 void ModelRoutine::updateJunctionEndInfo( Vector<JunctionEndInfo>& v_junctionEndInfo ) {
 	/* MODEL START */
 
-	v_junctionEndInfo.clear();
+	CHECK( NUM_JUNCTION_END_TYPES == 1 );
+	CHECK( NUM_JUNCTION_END_MODEL_INTS == 0 );
+
+	v_junctionEndInfo.resize( NUM_JUNCTION_END_TYPES );
+
+	JunctionEndInfo info;
+
+	info.numModelReals = 0;
+	info.numModelInts = 0;
+
+	v_junctionEndInfo[JUNCTION_END_BUD] = info;
+	
 
 	/* MODEL END */
 

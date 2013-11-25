@@ -22,6 +22,46 @@ typedef enum _agent_type_e {
 	NUM_AGENT_TYPES
 } agent_type_e;
 
+
+/* ---YEAST_CELL properties--- */
+
+
+typedef enum _yeast_cell_model_real_e {
+	YEAST_CELL_MODEL_REAL_BUD_DIR_X, // = 1, x dir for bud
+	YEAST_CELL_MODEL_REAL_BUD_DIR_Y, // = 0, y dir for bud
+	YEAST_CELL_MODEL_REAL_CC_CLOCK, // = 0, current cell cycle pos
+	NUM_YEAST_CELL_MODEL_REALS
+} yeast_cell_model_real_e;
+
+typedef enum _yeast_cell_model_int_e {
+	YEAST_CELL_MODEL_INT_MOTHER, // = 0, tracks if cell is a mother ie value of 1
+	NUM_YEAST_CELL_MODEL_INTS
+} yeast_cell_model_int_e;
+
+
+/* Integer ExtraMech properties for all cell types */
+typedef enum _extra_mech_yeast_cell_model_real_e {
+	EXTRA_MECH_YEAST_CELL_MODEL_REAL_ADD_FORCE_X,  // addditonal force in x direction
+	EXTRA_MECH_YEAST_CELL_MODEL_REAL_ADD_FORCE_Y,  // addditonal force in x direction
+	EXTRA_MECH_YEAST_CELL_MODEL_REAL_BUD_DIR_X,  // updated direction of bud
+	EXTRA_MECH_YEAST_CELL_MODEL_REAL_BUD_DIR_Y,  // updated direction of bud
+	NUM_EXTRA_MECH_YEAST_CELL_MODEL_REALS
+} extra_mech_yeast_cell_model_real_e;
+
+
+
+
+/* ---Junction End--- */
+typedef enum _junction_end_type_e {
+	JUNCTION_END_BUD,
+	NUM_JUNCTION_END_TYPES
+} junction_end_type_e;
+
+
+typedef enum _junction_end_model_int_e {
+	NUM_JUNCTION_END_MODEL_INTS
+} junction_end_model_int_e;
+
 /* ---Difusable elements--- */
 
 typedef enum _diffusible_elem_e {
@@ -41,16 +81,6 @@ typedef enum _grid_model_int_e {
 	GRID_MODEL_INT_GLUCOSE_AVAILABLE,  // is there enough glucose in this grid for uptake.
 	NUM_GRID_MODEL_INTS
 } grid_model_int_e;
-
-/* ---YEAST_CELL properties--- */
-
-typedef enum _yeast_cell_model_real_e {
-	YEAST_CELL_MODEL_REAL_BUD_DIR_X, // = 1, x dir for bud
-	YEAST_CELL_MODEL_REAL_BUD_DIR_Y, // = 0, y dir for bud
-	YEAST_CELL_MODEL_REAL_CC_CLOCK, // = 0, current cell cycle pos
-	NUM_YEAST_CELL_MODEL_REALS
-} yeast_cell_model_real_e;
-
 
 typedef enum _model_rng_type_e {
 	MODEL_RNG_UNIFORM,
@@ -74,6 +104,7 @@ const S32 WRITE_WARNING = 1; // set to one to write modeling warnings, set to 0 
 const REAL ELEM_BULK_CONCENTRATION[NUM_DIFFUSIBLE_ELEMS] = {2.0e-2}; // ng/um^3
 const REAL ELEM_BETA[NUM_DIFFUSIBLE_ELEMS] = {600}; //um^2/sec
 const REAL KAPPA_MIN = 0.1; // minimum kappa
+const REAL BETA_MIN_SCALE = 0.05;
 
 /* ---Cell Properties--- */
 
@@ -82,16 +113,19 @@ const REAL KAPPA_MIN = 0.1; // minimum kappa
 const REAL GROWTH_RATE = 0.0001375; // [=] sec^-1, cite Charvin2009 
 // linear rate of cell cycle clock, 
 const REAL CC_CLOCK_RATE = 0.0002347; // [=] sec^-1, cite Charvin2009 
+const REAL BUD_DIR_SCALE = 0.05; // scale factor for random perturbation of next bud location
+const REAL BUD_OVERLAP = 0.05; // um, length of overlap allowed for 2 agents that are connected by bud
 /* Critical volume maitained by cell, also strts CC clock
 Based here on radius of 2 micrometers, roughly average size of yeast
 */
 const REAL R_CRITICAL = 2.0; // [=] micro meters
 const REAL VOL_CRITICAL = R_CRITICAL * R_CRITICAL * R_CRITICAL * GEN_PI43; // [=] um^3
 // Reset limit on clock 
+const REAL CC_CLOCK_G1 = .25; // cite Charvin2009, end of g1 and start of bud formaiton 
 const REAL CC_CLOCK_CRITICAL = 1.0; // cite Charvin2009
 /* -physical properties- */
 // maximum radius we are expecting for yeast cell, 2x volume:
-const REAL CELL_R_MAX = 1.2599*R_CRITICAL;
+const REAL CELL_R_MAX = R_CRITICAL; //1.2599*R_CRITICAL;
 // Maximum interaction distance for 2 cells
 const REAL CELL_INTRCT_DIST_MAX = 2.0*CELL_R_MAX;
 // standard uptake of difusable elements 
@@ -102,14 +136,14 @@ const REAL CELL_ELEM_CONSTANT_UPTAKE[NUM_DIFFUSIBLE_ELEMS] = {4.2e-5}; // ng/(se
 
 /* ---Domain--- */
 const REAL IF_GRID_SPACING = CELL_INTRCT_DIST_MAX;/* this should be equal to or larger than MAX_CELL_RADIUS * 2.0, domain size in the xml file = 128 * 128 * 4928 */
-const REAL BASELINE_TIME_STEP_DURATION = 100; // sec
-const S32 NUM_STATE_AND_GRID_TIME_STEPS_PER_BASELINE = 10;
+const REAL BASELINE_TIME_STEP_DURATION = 20; // sec
+const S32 NUM_STATE_AND_GRID_TIME_STEPS_PER_BASELINE = 2;
 const REAL STATE_AND_GRID_TIME_STEP = BASELINE_TIME_STEP_DURATION / ( REAL ) NUM_STATE_AND_GRID_TIME_STEPS_PER_BASELINE;
 // maximum displacement per step
 const REAL MAX_DISP = IF_GRID_SPACING; 
 /* -Grid Properties- */
 const S32 NUM_AMR_LEVELS = 1;
-const S32 NUM_PDE_TIME_STEPS_PER_STATE_AND_GRID_STEP = 1;
+const S32 NUM_PDE_TIME_STEPS_PER_STATE_AND_GRID_STEP = 5;
 
 
 /* ---Cell Properties 2--- */
@@ -125,6 +159,7 @@ assuming cell is 2 orders more stiff then wall,
 geometric mixture -> one order less
 */
 const REAL CELL_WALL_STIFF = CELL_STIFF / 10.0;
+const REAL BUD_STIFF = CELL_STIFF;
 
 
 

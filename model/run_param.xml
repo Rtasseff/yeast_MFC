@@ -18,7 +18,7 @@ Biocellion has three main components.
 <!-- time_step, set the number of baseline time steps, required
 	num_baseline: number of baseline (to simulate 1-2 and 2) time steps, required, integer, [1,)
 -->
-<time_step num_baseline="1000"/>
+<time_step num_baseline="5000"/>
 <!-- domain, parameters describing the simulation domain
 	x: simulation grid size in the x direction, must be an integer multiple of refine_ratio^(number of AMR levels - 1) * 4 (minimum partition size), required, integer, [1,)
 	y: simulation grid size in the y direction, must be an integer multiple of refine_ratio^(number of AMR levels - 1) * 4 (minimum partition size), required, integer, [1,)
@@ -39,7 +39,7 @@ Biocellion has three main components.
 	num_extra: set the number of extra variables (in addition to radius and color) for particles, required, integer, [0,)
 	grid: set to vtm to output data using the VTK hierarchical box data format (currently only the vtm format is supported), required, vtm
 -->
-<output path="/users/rtasseff/biocellion/yeast_MFC/output" interval="2" particle="pvtu" num_extra="0" grid="vtm"/>
+<output path="/users/rtasseff/biocellion/yeast_MFC/output" interval="8" particle="pvtu" num_extra="0" grid="vtm"/>
 
 </required>
 
