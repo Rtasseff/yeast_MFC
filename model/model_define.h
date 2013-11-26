@@ -96,7 +96,7 @@ const REAL GEN_PI = 3.14159265359;
 const REAL GEN_PI43 = (4.0/3.0)*GEN_PI;
 const REAL GEN_SMALL = 1.0E-10;
 const REAL GEN_EPS = 1E-52;
-const S32 WRITE_WARNING = 1; // set to one to write modeling warnings, set to 0 to ignore.
+const BOOL WRITE_WARNING = true; // set to one to write modeling warnings, set to 0 to ignore.
 
 
 /* ---Diffusion--- */

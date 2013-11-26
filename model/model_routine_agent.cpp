@@ -21,14 +21,14 @@ void ModelRoutine::addSpAgents( const BOOL init, const VIdx& startVIdx, const VI
 	/* MODEL START */
 
 	if( init == true ) {
-		if ( startVIdx[2] == 0 && startVIdx[1] <= 7 && (startVIdx[1]+ regionSize[1]) >= 7 && startVIdx[0] <= 5 && (startVIdx[0]+ regionSize[0]) >= 5 ) {
+		if ( startVIdx[2] == 0 && startVIdx[1] <= 5 && (startVIdx[1]+ regionSize[1]) >= 5 && startVIdx[0] <= 5 && (startVIdx[0]+ regionSize[0]) >= 5 ) {
 			VIdx posVIdx;
 			VReal posOffset;
 			SpAgentState state;
 			REAL radius = R_CRITICAL;
 
 			posVIdx[0] = 5;
-			posVIdx[1] = 7;
+			posVIdx[1] = 5;
 			posVIdx[2] = 0;
 			posOffset[0] = 0.0;	
 			posOffset[1] = 0.0;	
@@ -41,7 +41,8 @@ void ModelRoutine::addSpAgents( const BOOL init, const VIdx& startVIdx, const VI
 			for ( S32 i = 0; i < NUM_YEAST_CELL_MODEL_REALS; i++ ) {
 				state.setModelReal( i, 0 );
 			}
-			state.setModelReal( YEAST_CELL_MODEL_REAL_BUD_DIR_X, 1 );
+			state.setModelReal( YEAST_CELL_MODEL_REAL_BUD_DIR_X, -0.7071 );
+			state.setModelReal( YEAST_CELL_MODEL_REAL_BUD_DIR_Y, -0.7071 );
 			CHECK ( NUM_YEAST_CELL_MODEL_INTS == 1 );
 			for ( S32 i = 0; i < NUM_YEAST_CELL_MODEL_INTS; i++ ) {
 				state.setModelInt( i, 0 );
@@ -295,12 +296,36 @@ void ModelRoutine::adjustSpAgent( const VIdx& vIdx, const AgentJunctionInfo& jun
 		disp[dim] = ( 1.0 / (CELL_DAMP_COEF) ) * force[dim] * BASELINE_TIME_STEP_DURATION  ;
 		if ( disp[dim] > MAX_DISP ) {
 			disp[dim] = MAX_DISP;
-			cout <<"WARNING:MRA_ASAS_0001 - Cell moving too much" <<endl;
+			if ( WRITE_WARNING == true ) {
+				cout <<"WARNING:MRA_ASAS_0001 - Cell moving too much" <<endl;
+			}
 		}
 		else if ( disp[dim] < (-1.0 * MAX_DISP) ) {
 			disp[dim] = -1.0 * MAX_DISP;
-			cout <<"WARNING:MRA_ASAS_0001 - Cell moving too much" <<endl;
+			if ( WRITE_WARNING == true ) {
+				cout <<"WARNING:MRA_ASAS_0001 - Cell moving too much" <<endl;
+			}
 		}
+	}
+	// no z-movment allowed unless its to move back to zero, warn if this happens:
+	if ( vIdx[2] == 0 && FABS( vOffset[2] ) < GEN_SMALL ) {
+		// in correct place, do not allow disp
+		if ( FABS( disp[2] ) > GEN_SMALL ) {
+			disp[2] = 0.0;
+			if ( WRITE_WARNING == true ) {
+				cout <<"WARNING:MRA_ASAS_0003 - Cell was set to move in z, corrected" <<endl;
+			}
+		}
+	}
+	else if ( vIdx[2] == 0 && FABS( vOffset[2] ) > GEN_SMALL ) {
+		disp[2] = -1.0 * vOffset[2];
+		if ( WRITE_WARNING == true ) {
+			cout <<"WARNING:MRA_ASAS_0004 - Cell was found off center in z, corrected" <<endl;
+		}
+
+	}
+	else {
+		ERROR( "cell moved out of z=0 UB grid.");
 	}
 
 

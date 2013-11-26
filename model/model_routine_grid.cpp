@@ -297,7 +297,7 @@ void ModelRoutine::updateIfGridRHSLinear( const S32 elemIdx, const VIdx& vIdx, c
 		if ( ( total + delta ) < GEN_SMALL ) {
 			// taking all of the glucose
 			delta = -1.0 * total + GEN_SMALL;
-			if ( WRITE_WARNING == 1 ){
+			if ( WRITE_WARNING == true ){
 				cout <<"WARNING:MRG_UIGRHSL_0002 - Taking too much glucose, correcting." <<endl;
 			}
 		}
