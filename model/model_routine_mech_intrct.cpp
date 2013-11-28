@@ -74,11 +74,12 @@ void ModelRoutine::computeExtraMechIntrctSpAgent( const VIdx& vIdx0, const SpAge
 			REAL mag = 0;/* + for repulsive force, - for adhesive force */
 			// remove original force for the interaction between these
 			if( dist <= R ) {/* shoving to remove the overlap */
-				mag = -1.0 * CELL_STIFF * ( R - dist );
+				mag += -1.0 * CELL_STIFF * ( R - dist );
 			}
 			// add new force allowing for some overlap with this bud
 
-			mag = BUD_STIFF * ( ( R - BUD_OVERLAP ) - dist );
+			mag += BUD_STIFF * ( ( R - BUD_OVERLAP ) - dist );
+
 			extraMechIntrctData0.setModelReal( EXTRA_MECH_YEAST_CELL_MODEL_REAL_ADD_FORCE_X, mag * dir[0] );
 			extraMechIntrctData0.setModelReal( EXTRA_MECH_YEAST_CELL_MODEL_REAL_ADD_FORCE_Y, mag * dir[1] );
 			extraMechIntrctData1.setModelReal( EXTRA_MECH_YEAST_CELL_MODEL_REAL_ADD_FORCE_X, -1 * mag * dir[0] );

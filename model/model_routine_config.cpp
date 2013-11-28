@@ -179,17 +179,23 @@ void ModelRoutine::updatePDEInfo( Vector<PDEInfo>& v_pdeInfo ) {
 void ModelRoutine::updateIfGridModelVarInfo( Vector<IfGridModelVarInfo>& v_ifGridModelRealInfo, Vector<IfGridModelVarInfo>& v_ifGridModelIntInfo ) {
 	/* MODEL START */
 
-	CHECK( NUM_GRID_MODEL_REALS == 2 );
+	CHECK( NUM_GRID_MODEL_REALS == 3 );
 
 	IfGridModelVarInfo info;
 
 	v_ifGridModelRealInfo.resize( NUM_GRID_MODEL_REALS );
 
 	info.name = "glucose_delta";
-	info.printSummary = false;
-	info.summaryType = SUMMARY_TYPE_SUM;/* dummy */
+	info.printSummary = true;
+	info.summaryType = SUMMARY_TYPE_SUM;
 
 	v_ifGridModelRealInfo[GRID_MODEL_REAL_GLUCOSE_DELTA] = info;
+
+	info.name = "glucose_frac_available";
+	info.printSummary = true;
+	info.summaryType = SUMMARY_TYPE_MIN;
+
+	v_ifGridModelRealInfo[GRID_MODEL_REAL_GLUCOSE_FRAC_AVAILABLE] = info;
 
 	info.name = "agent_volume";
 	info.printSummary = true;
@@ -198,16 +204,10 @@ void ModelRoutine::updateIfGridModelVarInfo( Vector<IfGridModelVarInfo>& v_ifGri
 	v_ifGridModelRealInfo[GRID_MODEL_REAL_AGENT_VOL] = info;
 
 
-	CHECK( NUM_GRID_MODEL_INTS == 1 );
+	CHECK( NUM_GRID_MODEL_INTS == 0 );
 
 
 	v_ifGridModelIntInfo.resize( NUM_GRID_MODEL_INTS );
-
-	info.name = "glucose_avalible";
-	info.printSummary = false;
-	info.summaryType = SUMMARY_TYPE_SUM;/* dummy */
-
-	v_ifGridModelIntInfo[GRID_MODEL_INT_GLUCOSE_AVAILABLE] = info;
 
 	/* MODEL END */
 

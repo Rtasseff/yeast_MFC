@@ -19,6 +19,15 @@ void ModelRoutine::updateSpAgentOutput( const VIdx& vIdx, const SpAgent& spAgent
 	/* MODEL START */
 	
 	color = spAgent.state.getType();
+	// show agents involved in buding  
+	if (  spAgent.junctionInfo.getNumJunctions()==1 ) {
+		color += 1;
+		//distinguish mother ends of bud
+		if ( spAgent.state.getModelInt( YEAST_CELL_MODEL_INT_MOTHER ) == 1 ) {
+			color += 1;
+		}
+	}
+	
 	CHECK( v_extra.size() == 0 );
 
 	/* MODEL END */

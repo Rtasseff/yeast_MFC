@@ -16,19 +16,26 @@
 
 using namespace std;
 
+/* Extra Utility Functions */
+static void computeGridDelta( const REAL dir[2], const VReal vOffset, const REAL r, const REAL IF, REAL delta );
+
+static void computeOccupFracArray( const VReal vOffset, const REAL r, const REAL IF, REAL aa_occupFrac[3][3] );
+
 #if HAS_SPAGENT
 void ModelRoutine::addSpAgents( const BOOL init, const VIdx& startVIdx, const VIdx& regionSize, const IfGridBoxData<BOOL>& ifGridHabitableBoxData, Vector<VIdx>& v_spAgentVIdx, Vector<SpAgentState>& v_spAgentState, Vector<VReal>& v_spAgentOffset ) {
 	/* MODEL START */
 
 	if( init == true ) {
-		if ( startVIdx[2] == 0 && startVIdx[1] <= 5 && (startVIdx[1]+ regionSize[1]) >= 5 && startVIdx[0] <= 5 && (startVIdx[0]+ regionSize[0]) >= 5 ) {
+		if ( startVIdx[2] == 0 && startVIdx[1] <= 8 && (startVIdx[1]+ regionSize[1]) > 8 && startVIdx[0] <= 5 && (startVIdx[0]+ regionSize[0]) >= 5 ) {
+
+
 			VIdx posVIdx;
 			VReal posOffset;
 			SpAgentState state;
 			REAL radius = R_CRITICAL;
 
 			posVIdx[0] = 5;
-			posVIdx[1] = 5;
+			posVIdx[1] = 8;
 			posVIdx[2] = 0;
 			posOffset[0] = 0.0;	
 			posOffset[1] = 0.0;	
@@ -37,12 +44,16 @@ void ModelRoutine::addSpAgents( const BOOL init, const VIdx& startVIdx, const VI
 			// set up the state
 			state.setType( AGENT_YEAST_CELL );
 			state.setRadius( radius );
-			CHECK ( NUM_YEAST_CELL_MODEL_REALS == 3 );
+			CHECK ( NUM_YEAST_CELL_MODEL_REALS == 12 );
 			for ( S32 i = 0; i < NUM_YEAST_CELL_MODEL_REALS; i++ ) {
 				state.setModelReal( i, 0 );
 			}
+			// set a direction for budding 
 			state.setModelReal( YEAST_CELL_MODEL_REAL_BUD_DIR_X, -0.7071 );
 			state.setModelReal( YEAST_CELL_MODEL_REAL_BUD_DIR_Y, -0.7071 );
+			// set agent to fully occupy the center box
+			state.setModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_1_1, 1.0 );
+
 			CHECK ( NUM_YEAST_CELL_MODEL_INTS == 1 );
 			for ( S32 i = 0; i < NUM_YEAST_CELL_MODEL_INTS; i++ ) {
 				state.setModelInt( i, 0 );
@@ -75,33 +86,34 @@ void ModelRoutine::spAgentCRNODERHS( const S32 odeNetIdx, const VIdx& vIdx, cons
 void ModelRoutine::updateSpAgentState( const VIdx& vIdx, const AgentJunctionInfo& junctionInfo, const VReal& offset, const Vector<NbrBox<REAL> >& v_gridPhiNbrBox/* [elemIdx] */, const Vector<NbrBox<REAL> >& v_gridModelRealNbrBox/* [elemIdx] */, const Vector<NbrBox<S32> >& v_gridModelIntNbrBox/* [elemIdx] */, SpAgentState& state ) {
 	/* MODEL START */
 
+
+
+
 	if (state.getType() == AGENT_YEAST_CELL ) { // yeast cell type -->
 
 		REAL R0 = state.getRadius();
 		REAL V0 = GEN_PI43 * R0 * R0 * R0;
-		BOOL hasGlucose = false;
+		REAL deltaV;
 
 
 		/* ---Nutriant Uptake--- 
 		Uptake calculated at grid,
-		check if enough was avalible:
+		check if enough or how much was avalible:
 		*/
-		if ( v_gridModelIntNbrBox[GRID_MODEL_INT_GLUCOSE_AVAILABLE].getVal( 0, 0, 0) == 1 ){
-			//cell uptakes the stuff
-			hasGlucose = true;
-		}
+		REAL fracGlucoseAvail = v_gridModelRealNbrBox[GRID_MODEL_REAL_GLUCOSE_FRAC_AVAILABLE].getVal( 0, 0, 0);
+
 
 		/* ---Growth--- 
 		Assuming exponential growth
-		only if glucose is avalible
+		limit growth by fraction of glucose available 
 		*/
-		if (hasGlucose == true) {
-			REAL V1;
+		if (fracGlucoseAvail > 0.0) {
+			
 			// FD to calc step size
 			// allowing multiple situations:
 			// 1 No Junction, no bud:
 			if ( junctionInfo.getNumJunctions() == 0 ){
-				V1 = V0 + STATE_AND_GRID_TIME_STEP * GROWTH_RATE * V0;
+				deltaV = STATE_AND_GRID_TIME_STEP * GROWTH_RATE * V0;
 			}
 			else if ( junctionInfo.getNumJunctions() == 1 ){
 				// has bud
@@ -110,11 +122,11 @@ void ModelRoutine::updateSpAgentState( const VIdx& vIdx, const AgentJunctionInfo
 					grom at combined rate of this agent + mother
 					where we assume mother to be of critical volume
 					*/
-					V1 = V0 + STATE_AND_GRID_TIME_STEP * GROWTH_RATE * ( V0 + VOL_CRITICAL );
+					deltaV = STATE_AND_GRID_TIME_STEP * GROWTH_RATE * ( V0 + VOL_CRITICAL );
 				}
 				else if ( state.getModelInt(YEAST_CELL_MODEL_INT_MOTHER) ==  1 ){
 					// 3 mothers do not grow
-					V1 = V0;
+					deltaV = 0.0;
 				}
 				else {
 
@@ -127,21 +139,22 @@ void ModelRoutine::updateSpAgentState( const VIdx& vIdx, const AgentJunctionInfo
 			}
 
 
-
-			state.setRadius( CBRT( V1 / GEN_PI43 ) );
+			// account for reduced glucose avalible
+			deltaV *= fracGlucoseAvail;
+			state.setRadius( CBRT( ( V0 + deltaV ) / GEN_PI43 ) );
 		}
 
 
 		/* ---Cell Cycle Progression--- 
 		Assuming critical size, const theta model
 		Charvin2009
-		Only do if we have glucose
+		Limit progression by fraciton of glucose available.
 		*/
-		if (hasGlucose == true) {
+		if (fracGlucoseAvail > 0 ) {
 			// check critical V:
 			if ( V0 >= VOL_CRITICAL ) {
 				// move internal clock:
-				state.incModelReal( YEAST_CELL_MODEL_REAL_CC_CLOCK, (CC_CLOCK_RATE * STATE_AND_GRID_TIME_STEP) );
+				state.incModelReal( YEAST_CELL_MODEL_REAL_CC_CLOCK, ( CC_CLOCK_RATE * STATE_AND_GRID_TIME_STEP * fracGlucoseAvail ) );
 			}
 		}
 
@@ -212,11 +225,31 @@ void ModelRoutine::adjustSpAgent( const VIdx& vIdx, const AgentJunctionInfo& jun
 	VReal force = mechIntrctData.force;
 	const ExtraMechIntrctData extraData = mechIntrctData.extraMechIntrctData;
 
+
+	// check bud conditions:
+	if ( state.getModelInt( YEAST_CELL_MODEL_INT_MOTHER ) == 1 ) {
+		if ( junctionInfo.getNumJunctions()==0 ) {
+			// this should not happen unless bud moved too far away, which is an error.
+			state.setModelInt( YEAST_CELL_MODEL_INT_MOTHER, 0 );
+			state.setModelReal( YEAST_CELL_MODEL_REAL_CC_CLOCK, 0.0 );
+			if ( WRITE_WARNING == true ) {
+				cout <<"WARNING:MRA_ASAS_0005 - Mother found with no bud, set as not mother.  Reduce BL step size" <<endl;
+			}
+		}
+		else if ( junctionInfo.getNumJunctions()>1 ) {
+			ERROR("Mother found with multiple buds, no logic to handel this.");
+		}
+	}
+
+
+
+
 	//cout << vOffset[2] <<endl;	
 	/* ---Cell Boundry Collision---
 	The cell boundry collision will consist of shoving.
 	We must specificly look for boundry with chip desing (dummy spaces).
 	We will not look at boundry of x high or low domain.
+	Allowing walls to be a little closer to make up for large grid resolution.
 	*/
 
 	REAL dist;
@@ -225,7 +258,7 @@ void ModelRoutine::adjustSpAgent( const VIdx& vIdx, const AgentJunctionInfo& jun
 
 	// impact with y bound low
 	if ( vIdx[1]==0 ){
-		dist = vOffset[1] + 0.5 * IF_GRID_SPACING;
+		dist = vOffset[1] + 0.5 * IF_GRID_SPACING - ADD_WALL;
 		if ( dist < R0 ) {
 			// hitting low bound, push up
 			force[1] += CELL_WALL_STIFF * (R0 - dist);
@@ -234,7 +267,7 @@ void ModelRoutine::adjustSpAgent( const VIdx& vIdx, const AgentJunctionInfo& jun
 	}
 	// impact with y bound high
 	if ( vIdx[1] == (UB_NUM[1] - 1) ){
-		dist = 0.5 * IF_GRID_SPACING - vOffset[1];
+		dist = 0.5 * IF_GRID_SPACING - vOffset[1]  - ADD_WALL;
 		if (dist < R0) {
 			//hitting low bound, push down 
 			force[1] += CELL_WALL_STIFF * (dist - R0);
@@ -244,7 +277,7 @@ void ModelRoutine::adjustSpAgent( const VIdx& vIdx, const AgentJunctionInfo& jun
 	for( S32 dim = 0 ; dim < 2 ; dim++ ) {
 		if ( vIdx[dim]>0 ){
 			// check below
-			dist = vOffset[dim] + 0.5 * IF_GRID_SPACING;
+			dist = vOffset[dim] + 0.5 * IF_GRID_SPACING  - ADD_WALL;
 			vIdxTmp = vIdx;
 			vIdxTmp[dim] = vIdxTmp[dim]-1;
 			// if within range and its not habitable...
@@ -255,7 +288,7 @@ void ModelRoutine::adjustSpAgent( const VIdx& vIdx, const AgentJunctionInfo& jun
 		}
 		if ( vIdx[dim]<(UB_NUM[dim] - 1) ){
 			// check above
-			dist = 0.5 * IF_GRID_SPACING - vOffset[dim];
+			dist = 0.5 * IF_GRID_SPACING - vOffset[dim]  - ADD_WALL;
 			vIdxTmp = vIdx;
 			vIdxTmp[dim] = vIdxTmp[dim]+1;
 			// if within range and its not habitable...
@@ -353,6 +386,39 @@ void ModelRoutine::adjustSpAgent( const VIdx& vIdx, const AgentJunctionInfo& jun
 
 	}
 
+
+	/* ---Update Occupation Fraction---
+	We do it here assuming that movment is the largest cause of change
+	in occupation fraction, and that growht in one base step is negligable.
+	This funciton is called after th grid updates but before the disp is added
+	so we need to calculate the fraction for the next step, that is we need
+	to manually consider the displacment.
+	*/
+	REAL aa_occupFrac[3][3];
+	VReal vNewOffset = vOffset + disp;
+
+	for( S32 dim = 0 ; dim < 3 ; dim++ ) {
+		// dx/dt = 1/c * sum(Force); delta_x = dx/dt*delta_t
+		if ( vNewOffset[dim] > ( 0.5 * IF_GRID_SPACING ) ) {
+			vNewOffset[dim] -= IF_GRID_SPACING;
+		}
+		if ( vNewOffset[dim] < ( -0.5 * IF_GRID_SPACING ) ) {
+			vNewOffset[dim] += IF_GRID_SPACING;
+		}
+	}
+	computeOccupFracArray( vNewOffset, R0 , IF_GRID_SPACING, aa_occupFrac );
+	// now set them up in memory as model reals
+	
+	state.setModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_0_0, aa_occupFrac[0][0] );
+	state.setModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_0_1, aa_occupFrac[0][1] );
+	state.setModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_0_2, aa_occupFrac[0][2] );
+	state.setModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_1_0, aa_occupFrac[1][0] );
+	state.setModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_1_1, aa_occupFrac[1][1] );
+	state.setModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_1_2, aa_occupFrac[1][2] );
+	state.setModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_2_0, aa_occupFrac[2][0] );
+	state.setModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_2_1, aa_occupFrac[2][1] );
+	state.setModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_2_2, aa_occupFrac[2][2] );
+
 	
 
 	/* MODEL END */
@@ -393,19 +459,23 @@ void ModelRoutine::divideSpAgent( const VIdx& vIdx, const AgentJunctionInfo& jun
 	motherState.setRadius( CBRT( VOL_CRITICAL / GEN_PI43 ) );
 	daughterState.setRadius( CBRT( Vd / GEN_PI43 ) );
 	// displacement determined by bud dir and radius
-	motherDisp[0] = -1.0 * motherState.getModelReal( YEAST_CELL_MODEL_REAL_BUD_DIR_X ) * motherState.getRadius();
-	motherDisp[1] = -1.0 * motherState.getModelReal( YEAST_CELL_MODEL_REAL_BUD_DIR_Y ) * motherState.getRadius();
+	motherDisp[0] = -1.0 * motherState.getModelReal( YEAST_CELL_MODEL_REAL_BUD_DIR_X ) * ( motherState.getRadius() - BUD_OVERLAP );
+	motherDisp[1] = -1.0 * motherState.getModelReal( YEAST_CELL_MODEL_REAL_BUD_DIR_Y ) * ( motherState.getRadius() - BUD_OVERLAP );
 	motherDisp[2] = 0.0;
 	daughterDisp[0] = motherState.getModelReal( YEAST_CELL_MODEL_REAL_BUD_DIR_X ) * daughterState.getRadius();
 	daughterDisp[1] = motherState.getModelReal( YEAST_CELL_MODEL_REAL_BUD_DIR_Y ) * daughterState.getRadius();
 	daughterDisp[2] = 0.0;
 
-	// set up state daughter	
-	CHECK( NUM_YEAST_CELL_MODEL_REALS==3 );
-	daughterState.setModelReal( YEAST_CELL_MODEL_REAL_CC_CLOCK, 0.0 );
-	
+	// set up state for daughter	
+	CHECK( NUM_YEAST_CELL_MODEL_REALS==12 );
+	for ( S32 i = 0; i < NUM_YEAST_CELL_MODEL_REALS; i++ ) {
+		daughterState.setModelReal( i, 0 );
+	}
 	daughterState.setModelReal(YEAST_CELL_MODEL_REAL_BUD_DIR_X, -1.0 * motherState.getModelReal( YEAST_CELL_MODEL_REAL_BUD_DIR_X ) );
 	daughterState.setModelReal(YEAST_CELL_MODEL_REAL_BUD_DIR_Y, -1.0 * motherState.getModelReal( YEAST_CELL_MODEL_REAL_BUD_DIR_Y ) );
+	// set agent to fully occupy the center box
+	daughterState.setModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_1_1, 1.0 );
+
 	CHECK( NUM_YEAST_CELL_MODEL_INTS == 1 );
 	daughterState.setModelInt( YEAST_CELL_MODEL_INT_MOTHER, 0 );
 
@@ -434,4 +504,111 @@ void ModelRoutine::disappearSpAgent( const VIdx& vIdx, const SpAgent& spAgent, c
 	return;
 }
 #endif
+/* Extra Utility Functions */
+static void computeGridDelta( const REAL dir[2], const VReal vOffset, const REAL r, const REAL IF, REAL delta ) {
+	/* Compute specified grid delta, where delta is the overlap distance with the grid.
+	Specifically delta is the difference between the radius and the shortest distance to the 
+	specified grid boundary, edge for direct neighbors and corner for corner neighbors.
+	If the agent is a sphere then delta is the maximum distance within the grid on a line
+	that goes from the agent center to the agent boundary, or maximum overlap distance.
+	Can be used to calculate overlap for mechanical force interactions, or overlap
+	for use in estimating the occupation fraction.
+	Use dir to specify neighbor grid as upper (1) or lower (-1) for each dimension (x,y) or zero to ignore that dimension.
+	vOffset is agent offset at center box
+	r is agent radius 
+	IF is the interface Grid spacing 
+	Will return zero for the center UB {0,0}.
+	*/
+
+	/* this could be done in shorter code by calculating the DHat and setting dist to sqrt(sum(DHat**2))
+	but we want to avoid squaring and rooting when possible.
+	*/
+
+	if (dir[0] == 0 && dir[1] == 0 ) {
+		delta = 0.0;
+	}
+	else {
+		REAL DHat[2] = {0,0};
+		REAL b = 0;
+		REAL dist = 0;
+
+		for( S32 dim = 0 ; dim < 2 ; dim++ ) {
+			if ( dir[dim]== 1 || dir[dim] == -1 ) {
+				// boundary location in this dim
+				b = ( ( REAL ) dir[dim] ) * 0.5 * IF;
+				// subtract locations in this dim
+				DHat[dim] = vOffset[dim] - b;
+			}
+			else if ( dir[dim] != 0 ) {
+				cout << dir[dim] <<endl;
+				ERROR ( "Incorrect neighbor specification in dir in computeGridDelta" );
+			}
+		}
+		if ( dir[0]==0 ) {
+			//dim 1 must be not zero
+			dist = FABS(DHat[1]);
+		}
+		else if ( dir[1]==0 ) {
+			//dim 0 must be not zero
+			dist = FABS(DHat[0]);
+		}
+		else {
+			// corner
+			dist = SQRT ( DHat[0]*DHat[0] + DHat[1]*DHat[1] );
+		}
+
+		if ( r > dist ) {
+			delta = r - dist;
+		}
+		else {
+			delta = 0.0;
+		}
+
+
+	}
+
+}
+static void computeOccupFracArray( const VReal vOffset, const REAL r, const REAL IF, REAL aa_occupFrac[3][3]){
+	/* Calculate the approximate occupation fraction of this agent in all accessible boxes.
+	Assumes 2d (x,y) and spherical agent centered at offset with radius r.
+	Note the offset for the neighbor grid is determined by -1 to aa index.
+	*/
+	REAL total = 0.0;
+	S32 num = 0;
+	REAL delta;
+	REAL tmp;
+	REAL gridOffset[2] = {0,0};
+
+	for ( S32 x_i = 0; x_i < 3; x_i++ ){
+		for ( S32 y_i = 0; y_i < 3; y_i++ ){
+			delta = 0;
+			gridOffset[0] = x_i-1;
+			gridOffset[1] = y_i-1;
+			computeGridDelta( gridOffset, vOffset, r, IF, delta );
+			if ( delta > GEN_SMALL ) {
+				aa_occupFrac[x_i][y_i] = delta;
+				num += 1;
+				total += delta;
+			}
+			else {
+				aa_occupFrac[x_i][y_i] = 0;
+			}
+		}
+	}
+	/* center box always is zero, need to calculate based on others,
+	this is an approximate function chosen so that an agent with center on 
+	an edge between 2 grids or at a corner for 4 grids will 
+	have equal sharing with all overlapping grids.
+	*/
+
+	tmp = ( ( 1.0 + (REAL)num ) * r ) - total;
+	total += tmp;
+	aa_occupFrac[1][1] = tmp;
+
+	for ( S32 x_i = 0; x_i < 3; x_i++ ){
+		for ( S32 y_i = 0; y_i < 3; y_i++ ){
+			aa_occupFrac[x_i][y_i] = aa_occupFrac[x_i][y_i] / total ;
+		}
+	}
+}
 

@@ -11,7 +11,7 @@
 time = seconds (sec);
 length = micrometers ($\mu m$);
 volume = cubic micrometers ($\mu m^3$);
-mass = nano grams (ng);
+mass = pico grams (pg);
 concentration = $frac\{ng}{\mu m^3}$;
 */
 
@@ -30,6 +30,15 @@ typedef enum _yeast_cell_model_real_e {
 	YEAST_CELL_MODEL_REAL_BUD_DIR_X, // = 1, x dir for bud
 	YEAST_CELL_MODEL_REAL_BUD_DIR_Y, // = 0, y dir for bud
 	YEAST_CELL_MODEL_REAL_CC_CLOCK, // = 0, current cell cycle pos
+	YEAST_CELL_MODEL_REAL_OCCUP_FRAC_0_0,  // fraction of occupation of this agent in all possible boxes (-1 from index shows offset, ie 0_2 is -1 in x and +1 in y, or top left corner)
+	YEAST_CELL_MODEL_REAL_OCCUP_FRAC_0_1,
+	YEAST_CELL_MODEL_REAL_OCCUP_FRAC_0_2,
+	YEAST_CELL_MODEL_REAL_OCCUP_FRAC_1_0,
+	YEAST_CELL_MODEL_REAL_OCCUP_FRAC_1_1,
+	YEAST_CELL_MODEL_REAL_OCCUP_FRAC_1_2,
+	YEAST_CELL_MODEL_REAL_OCCUP_FRAC_2_0,
+	YEAST_CELL_MODEL_REAL_OCCUP_FRAC_2_1,
+	YEAST_CELL_MODEL_REAL_OCCUP_FRAC_2_2,
 	NUM_YEAST_CELL_MODEL_REALS
 } yeast_cell_model_real_e;
 
@@ -73,12 +82,12 @@ typedef enum _diffusible_elem_e {
 
 typedef enum _grid_model_real_e {
 	GRID_MODEL_REAL_GLUCOSE_DELTA, // amount of glucose change in grid
+	GRID_MODEL_REAL_GLUCOSE_FRAC_AVAILABLE, // amount of glucose avalible / needed by agents
 	GRID_MODEL_REAL_AGENT_VOL,
 	NUM_GRID_MODEL_REALS
 } grid_model_real_e;
 
 typedef enum _grid_model_int_e {
-	GRID_MODEL_INT_GLUCOSE_AVAILABLE,  // is there enough glucose in this grid for uptake.
 	NUM_GRID_MODEL_INTS
 } grid_model_int_e;
 
@@ -101,10 +110,11 @@ const BOOL WRITE_WARNING = true; // set to one to write modeling warnings, set t
 
 /* ---Diffusion--- */
 // concentration of elements in the bulk fluid in the flow channel
-const REAL ELEM_BULK_CONCENTRATION[NUM_DIFFUSIBLE_ELEMS] = {2.0e-2}; // ng/um^3
+const REAL ELEM_BULK_CONCENTRATION[NUM_DIFFUSIBLE_ELEMS] = {2.0e-2}; // pg/um^3
 const REAL ELEM_BETA[NUM_DIFFUSIBLE_ELEMS] = {600}; //um^2/sec
 const REAL KAPPA_MIN = 0.1; // minimum kappa
 const REAL BETA_MIN_SCALE = 0.05;
+const REAL MAX_UPTAKE_FRAC = 0.9; //maximum uptake in UB = total*MAX_UPTAKE_FRAC
 
 /* ---Cell Properties--- */
 
@@ -113,8 +123,8 @@ const REAL BETA_MIN_SCALE = 0.05;
 const REAL GROWTH_RATE = 0.0001375; // [=] sec^-1, cite Charvin2009 
 // linear rate of cell cycle clock, 
 const REAL CC_CLOCK_RATE = 0.0002347; // [=] sec^-1, cite Charvin2009 
-const REAL BUD_DIR_SCALE = 0.05; // scale factor for random perturbation of next bud location
-const REAL BUD_OVERLAP = 0.05; // um, length of overlap allowed for 2 agents that are connected by bud
+const REAL BUD_DIR_SCALE = 0.025; // scale factor for random perturbation of next bud location
+const REAL BUD_OVERLAP = 1; // um, length of overlap allowed for 2 agents that are connected by bud
 /* Critical volume maitained by cell, also strts CC clock
 Based here on radius of 2 micrometers, roughly average size of yeast
 */
@@ -131,19 +141,23 @@ const REAL CELL_INTRCT_DIST_MAX = 2.0*CELL_R_MAX;
 // standard uptake of difusable elements 
 
 /* -links to enviornment- */
-const REAL CELL_ELEM_CONSTANT_UPTAKE[NUM_DIFFUSIBLE_ELEMS] = {4.2e-5}; // ng/(sec*cell)
+const REAL CELL_ELEM_CONSTANT_UPTAKE[NUM_DIFFUSIBLE_ELEMS] = {4.17e-2}; // pg/(sec*cell)
 
 
 /* ---Domain--- */
 const REAL IF_GRID_SPACING = CELL_INTRCT_DIST_MAX;/* this should be equal to or larger than MAX_CELL_RADIUS * 2.0, domain size in the xml file = 128 * 128 * 4928 */
-const REAL BASELINE_TIME_STEP_DURATION = 20; // sec
-const S32 NUM_STATE_AND_GRID_TIME_STEPS_PER_BASELINE = 2;
+const REAL BASELINE_TIME_STEP_DURATION = 5; // sec
+/* grid steps for balancing diffusion and uptake,
+was estimated by how much glucose needed for 4 cells in full packed box, kappa = 0.1
+and the effective concentration equal to BC, ie not diffusion limited.
+*/
+const S32 NUM_STATE_AND_GRID_TIME_STEPS_PER_BASELINE = 8;
 const REAL STATE_AND_GRID_TIME_STEP = BASELINE_TIME_STEP_DURATION / ( REAL ) NUM_STATE_AND_GRID_TIME_STEPS_PER_BASELINE;
 // maximum displacement per step
 const REAL MAX_DISP = IF_GRID_SPACING; 
 /* -Grid Properties- */
 const S32 NUM_AMR_LEVELS = 1;
-const S32 NUM_PDE_TIME_STEPS_PER_STATE_AND_GRID_STEP = 5;
+const S32 NUM_PDE_TIME_STEPS_PER_STATE_AND_GRID_STEP = 2;
 
 
 /* ---Cell Properties 2--- */
@@ -158,7 +172,7 @@ const REAL CELL_STIFF = 0.5 * ( CELL_DAMP_COEF / BASELINE_TIME_STEP_DURATION );
 assuming cell is 2 orders more stiff then wall, 
 geometric mixture -> one order less
 */
-const REAL CELL_WALL_STIFF = CELL_STIFF / 10.0;
+const REAL CELL_WALL_STIFF = CELL_STIFF;// / 2.0;
 const REAL BUD_STIFF = CELL_STIFF;
 
 
@@ -173,6 +187,7 @@ Trapping Chip
 11 in x, 15 in Y
 5 by 5 block uninhabitable in each corrner.
 */
+const REAL ADD_WALL = 0.0;//0.5; // additional thickenss to wall in um 
 const S32 UB_NUM[2] = {12,16};
 const S32 CHIP_DESIGN_MATRIX[12][16] =			{{ 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0},
 							{ 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0},

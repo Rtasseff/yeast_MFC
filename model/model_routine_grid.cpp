@@ -12,14 +12,13 @@ void ModelRoutine::initIfGridVar( const VIdx& vIdx, const UBAgentData& ubAgentDa
 	/* MODEL START */
 
 	CHECK( NUM_DIFFUSIBLE_ELEMS == 1 );
-	CHECK( NUM_GRID_MODEL_REALS == 2 );
-	CHECK( NUM_GRID_MODEL_INTS == 1 );
+	CHECK( NUM_GRID_MODEL_REALS == 3 );
+	CHECK( NUM_GRID_MODEL_INTS == 0 );
 
 	v_gridModelReal[GRID_MODEL_REAL_GLUCOSE_DELTA] = 0.0;
 	v_gridModelReal[GRID_MODEL_REAL_AGENT_VOL] = 0.0;
+	v_gridModelReal[GRID_MODEL_REAL_GLUCOSE_FRAC_AVAILABLE] = 1.0;
 
-	v_gridModelInt[GRID_MODEL_INT_GLUCOSE_AVAILABLE] = 0;
-	
 	if (CHIP_DESIGN_MATRIX[vIdx[0]][vIdx[1]]==1 && vIdx[2]==0){
 		v_gridPhi[DIFFUSIBLE_ELEM_GLUCOSE] = ELEM_BULK_CONCENTRATION[DIFFUSIBLE_ELEM_GLUCOSE];
 	}
@@ -49,7 +48,9 @@ void ModelRoutine::updateIfGridVar( const BOOL pre, const S32 round, const VIdx&
 			*/
 
 			REAL glucoseEstUptake = 0;
+			REAL frac;
 			REAL glucoseTotal =  v_gridPhiNbrBox[DIFFUSIBLE_ELEM_GLUCOSE].getVal( 0, 0, 0 ) * IF_GRID_SPACING * IF_GRID_SPACING *IF_GRID_SPACING; // ng in UB
+			REAL agentVol = 0;
 
 			const UBAgentData& ubAgentData = *( ubAgentDataPtrNbrBox.getVal( 0, 0, 0 ) );
 
@@ -60,10 +61,18 @@ void ModelRoutine::updateIfGridVar( const BOOL pre, const S32 round, const VIdx&
 			*/
 			for( S32 i = 0 ; i < ( S32 )ubAgentData.v_spAgent.size() ; i++ ) {
 				const SpAgentState& state = ubAgentData.v_spAgent[i].state;
+				// caclulate volume
+				REAL r = state.getRadius();
+				agentVol += r * r * r * GEN_PI43;
 				if ( state.getType() == AGENT_YEAST_CELL  ){
-					glucoseEstUptake += CELL_ELEM_CONSTANT_UPTAKE[DIFFUSIBLE_ELEM_GLUCOSE] * STATE_AND_GRID_TIME_STEP; //ng uptake for this cell
+					glucoseEstUptake += CELL_ELEM_CONSTANT_UPTAKE[DIFFUSIBLE_ELEM_GLUCOSE] ; //ng / sec uptake for this cell
 				}
 			}
+
+			// update volume 
+			v_gridModelRealNbrBox[GRID_MODEL_REAL_AGENT_VOL].setVal( 0, 0, 0, agentVol );
+
+			glucoseEstUptake *= STATE_AND_GRID_TIME_STEP; //ng uptake for cells in this UB
 
 			/* -Uptake Decision- 
 			We have a simple uptake rule, if there is enough take it,
@@ -71,23 +80,34 @@ void ModelRoutine::updateIfGridVar( const BOOL pre, const S32 round, const VIdx&
 			otherwise do nothing 
 			check if we have enough:
 			*/
-			if ( glucoseEstUptake < glucoseTotal){
+			if ( glucoseEstUptake > GEN_SMALL ) {
+				frac = ( glucoseTotal * MAX_UPTAKE_FRAC  ) / glucoseEstUptake; // fraciton that can be provided 
+			}
+			else {
+				// no glucose needed or glucose will be added, ie we have all that we need or more
+				frac = 2.0; //number just needs to be >=1
+			}
+			if ( frac >= 1.0  ){
 				// indicate that cell uptake was sucessfull in this grid:
-				v_gridModelIntNbrBox[GRID_MODEL_INT_GLUCOSE_AVAILABLE].setVal( 0, 0, 0, 1 );
+				v_gridModelRealNbrBox[GRID_MODEL_REAL_GLUCOSE_FRAC_AVAILABLE].setVal( 0, 0, 0, 1.0 );
 				v_gridModelRealNbrBox[GRID_MODEL_REAL_GLUCOSE_DELTA].setVal( 0, 0, 0, -1 * glucoseEstUptake );
 				//cout <<glucoseEstUptake<<endl;
 			}
 			else {
 				// indicate that cell uptake is not possible in this grid:
-				v_gridModelIntNbrBox[GRID_MODEL_INT_GLUCOSE_AVAILABLE].setVal( 0, 0, 0, 0 );
-				v_gridModelRealNbrBox[GRID_MODEL_REAL_GLUCOSE_DELTA].setVal( 0, 0, 0, 0.0 );
-				cout <<"glucose uptake not possible for this grid!" <<endl;
+				v_gridModelRealNbrBox[GRID_MODEL_REAL_GLUCOSE_FRAC_AVAILABLE].setVal( 0, 0, 0, frac );
+				v_gridModelRealNbrBox[GRID_MODEL_REAL_GLUCOSE_DELTA].setVal( 0, 0, 0, ( -1.0 * glucoseTotal * MAX_UPTAKE_FRAC ) );
+				cout <<"glucose uptake not possible for this grid!"<<endl;
+				cout <<"glucose in box "<<glucoseTotal<<endl;
+				cout <<"glucose needed "<<glucoseEstUptake<<endl;
+				cout <<"cells in box "<<ubAgentData.v_spAgent.size()<<endl;
+				cout <<"x "<<vIdx[0]<<endl;
+				cout <<"y "<<vIdx[1]<<endl;
 			}
 
 
-		}
-		else { /* post */
-			/* calculate cell volume */
+			/* ---Cell Volume---
+			depricated
 			REAL agentVol = 0;
 			const UBAgentData& ubAgentData = *( ubAgentDataPtrNbrBox.getVal( 0, 0, 0 ) );
 			for( S32 i = 0 ; i < ( S32 )ubAgentData.v_spAgent.size() ; i++ ) {
@@ -96,7 +116,13 @@ void ModelRoutine::updateIfGridVar( const BOOL pre, const S32 round, const VIdx&
 				agentVol += r * r * r * GEN_PI43;
 			}
 			v_gridModelRealNbrBox[GRID_MODEL_REAL_AGENT_VOL].setVal( 0, 0, 0, agentVol );
+			*/
 
+
+		} //<-- pre 
+
+		else { /* post */
+			
 		}
 	}
 	else { // looking at dummy space
@@ -291,9 +317,15 @@ void ModelRoutine::updateIfGridRHSLinear( const S32 elemIdx, const VIdx& vIdx, c
 	REAL total =  v_gridPhi[DIFFUSIBLE_ELEM_GLUCOSE] * IF_GRID_SPACING * IF_GRID_SPACING *IF_GRID_SPACING; // ng in UB
 	REAL delta = v_gridModelReal[GRID_MODEL_REAL_GLUCOSE_DELTA];
 
-	if ( delta > GEN_SMALL ) {
+	if ( delta == 0.0 ) {
+		gridRHS = 0.0;
+	}
+	else {
 
-		/* estimate if too much */
+		/* estimate if too much 
+		this may not be a proper estimate as diffusion out can create issue,
+		but we assume better estimates are calcualted at the delta level caclulation if needed.
+		*/
 		if ( ( total + delta ) < GEN_SMALL ) {
 			// taking all of the glucose
 			delta = -1.0 * total + GEN_SMALL;
@@ -304,9 +336,6 @@ void ModelRoutine::updateIfGridRHSLinear( const S32 elemIdx, const VIdx& vIdx, c
 
 		gridRHS = delta / ( IF_GRID_SPACING * IF_GRID_SPACING * IF_GRID_SPACING * STATE_AND_GRID_TIME_STEP );
 
-	}
-	else {
-		gridRHS = 0.0;
 	}
 
 	/* MODEL END */
@@ -492,5 +521,6 @@ void ModelRoutine::updatePDEBufferNeumannBCVal( const S32 elemIdx, const VReal& 
 
 	return;
 }
+
 
 

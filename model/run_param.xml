@@ -18,7 +18,7 @@ Biocellion has three main components.
 <!-- time_step, set the number of baseline time steps, required
 	num_baseline: number of baseline (to simulate 1-2 and 2) time steps, required, integer, [1,)
 -->
-<time_step num_baseline="5000"/>
+<time_step num_baseline="20000"/>
 <!-- domain, parameters describing the simulation domain
 	x: simulation grid size in the x direction, must be an integer multiple of refine_ratio^(number of AMR levels - 1) * 4 (minimum partition size), required, integer, [1,)
 	y: simulation grid size in the y direction, must be an integer multiple of refine_ratio^(number of AMR levels - 1) * 4 (minimum partition size), required, integer, [1,)
@@ -39,7 +39,7 @@ Biocellion has three main components.
 	num_extra: set the number of extra variables (in addition to radius and color) for particles, required, integer, [0,)
 	grid: set to vtm to output data using the VTK hierarchical box data format (currently only the vtm format is supported), required, vtm
 -->
-<output path="/users/rtasseff/biocellion/yeast_MFC/output" interval="8" particle="pvtu" num_extra="0" grid="vtm"/>
+<output path="/users/rtasseff/biocellion/yeast_MFC/output" interval="40" particle="pvtu" num_extra="0" grid="vtm"/>
 
 </required>
 
@@ -76,7 +76,7 @@ Biocellion has three main components.
 	regridding: regridding interval (unit: baseline time steps), regridding should be equal to or smaller than load_balance and regridding should equally divide load_balance, optional, integer, default=100, [1,)
 	checkpoint: checkpoint interval (0: turn off, unit: baseline time steps), optional, default=0, integer, [0,)
 -->
-<interval summary="1" load_balance="100" regridding="100" checkpoint="100"/>
+<interval summary="10" load_balance="1000" regridding="1000" checkpoint="10000"/>
 
 <!-- amr, controls adaptive mesh refinement
 	refine_ratio: adaptive mesh refinement ratio between two consecutive levels, optional, default=2, 2|4
@@ -94,8 +94,8 @@ Biocellion has three main components.
 	mg_hang: minimum change per v-(or w-)cycle=1.0^mg_hang, optional, integer, default=-10, (,0]
 	mg_norm_threshold: convergence is assumed if the residual norm is equal to or smaller than 1.0^mg_norm_threshold, integer, default=-25, (,) (typically negative integer value)
 -->
-<mg_elliptic_solve mg_num_pre="3" mg_num_post="3" mg_num_bottom="3" mg_v_or_w="v" mg_max_iterations="100" mg_epsilon="-5" mg_hang="-10" mg_norm_threshold="-9"/>
-<mg_parabolic_solve mg_num_pre="3" mg_num_post="3" mg_num_bottom="3" mg_v_or_w="v" mg_max_iterations="50" mg_epsilon="-5" mg_hang="-10" mg_norm_threshold="-9"/>
+<mg_elliptic_solve mg_num_pre="3" mg_num_post="3" mg_num_bottom="3" mg_v_or_w="v" mg_max_iterations="100" mg_epsilon="-4" mg_hang="-10" mg_norm_threshold="-6"/>
+<mg_parabolic_solve mg_num_pre="3" mg_num_post="3" mg_num_bottom="3" mg_v_or_w="v" mg_max_iterations="50" mg_epsilon="-4" mg_hang="-10" mg_norm_threshold="-6"/>
 
 <!-- ode_solve, configuration parameters to solve ODEs, optional
 	epsilon: relative error tolerance=1.0^epsilon, this code cannot ensure the requested accuracy if epsilon is smaller than -9, optional, integer, default=-6, (,-1]
