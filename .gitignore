@@ -1,6 +1,7 @@
 # extra stuff
 output/*
 movies/*
+data/*
 
 # tex
 *.aux
