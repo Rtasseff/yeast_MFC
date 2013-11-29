@@ -8,15 +8,24 @@
 
 using namespace std;
 
+
+static void getIsHabitableArray( const VIdx vIdx, BOOL aa_isHabitable[3][3] );
+
+static void getIsHabitable( const VIdx vIdx, BOOL& isHabitable );
+
+static void getAgentOccupFrac( const S32 xOffset, const S32 yOffset, const SpAgentState state, REAL& frac );
+
+
 void ModelRoutine::initIfGridVar( const VIdx& vIdx, const UBAgentData& ubAgentData, Vector<REAL>& v_gridPhi/* [elemIdx] */, Vector<REAL>& v_gridModelReal/* [elemIdx] */, Vector<S32>& v_gridModelInt ) {
 	/* MODEL START */
 
 	CHECK( NUM_DIFFUSIBLE_ELEMS == 1 );
-	CHECK( NUM_GRID_MODEL_REALS == 3 );
+	CHECK( NUM_GRID_MODEL_REALS == 4 );
 	CHECK( NUM_GRID_MODEL_INTS == 0 );
 
 	v_gridModelReal[GRID_MODEL_REAL_GLUCOSE_DELTA] = 0.0;
 	v_gridModelReal[GRID_MODEL_REAL_AGENT_VOL] = 0.0;
+	v_gridModelReal[GRID_MODEL_REAL_AGENT_VOL_test] = 0.0;
 	v_gridModelReal[GRID_MODEL_REAL_GLUCOSE_FRAC_AVAILABLE] = 1.0;
 
 	if (CHIP_DESIGN_MATRIX[vIdx[0]][vIdx[1]]==1 && vIdx[2]==0){
@@ -36,88 +45,122 @@ void ModelRoutine::updateIfGridVar( const BOOL pre, const S32 round, const VIdx&
 	/* MODEL START */
 
 	CHECK( NUM_DIFFUSIBLE_ELEMS == 1 );
-	// only have one round set
-	CHECK( round == 0 );
 
 	// only z=0 is real, others are dummies
 	if( CHIP_DESIGN_MATRIX[vIdx[0]][vIdx[1]]==1 && vIdx[2] == 0 ){
 		if( pre == true ) {
-			/* ---Agent Uptake--- 
-			Only glucose, amount listed in model real,
-			add up the total amount taken in this step
-			*/
+			if ( round == 0 ){
+				/* ---Update Exclusion Volume--- 
+				Share volume based on occupation fraction for agents.
+				Using a strategy here to set this box to zero, 
+				and then increment this box and all others.
+				*/
+				REAL agentVol = 0;
+				REAL agentVolTest = 0;
+				REAL r;
+				REAL frac;
+				S32 xOffset;
+				S32 yOffset;
+				BOOL aa_isHabitable[3][3] = {{false,false,false},{false,false,false},{false,false,false}};
+				
+				getIsHabitableArray( vIdx, aa_isHabitable );
+				
+				/* NOTE: 
+				It would be better to just loop through the agents in the center box and just distribute their volume to the center box
+				and all other neighbor boxes, BUT I can not get the syncing to work properly and the totals do not 
+				come out correctly.
+				*/
 
-			REAL glucoseEstUptake = 0;
-			REAL frac;
-			REAL glucoseTotal =  v_gridPhiNbrBox[DIFFUSIBLE_ELEM_GLUCOSE].getVal( 0, 0, 0 ) * IF_GRID_SPACING * IF_GRID_SPACING *IF_GRID_SPACING; // ng in UB
-			REAL agentVol = 0;
+				// loop though all the neighbor boxes
+				for ( S32 x_i = 0; x_i < 3; x_i++ ) {
+					for ( S32 y_i = 0; y_i < 3; y_i++ ) {
+						xOffset = x_i - 1;
+						yOffset = y_i - 1;
+						if ( aa_isHabitable[x_i][y_i] == true ) {
+							// get all agents in the current grid
+							CHECK ( ubAgentDataPtrNbrBox.getValidFlag( xOffset, yOffset, 0 ) == true );
+							const UBAgentData& ubAgentData = *( ubAgentDataPtrNbrBox.getVal( xOffset, yOffset, 0 ) );
+							for( S32 i = 0 ; i < ( S32 )ubAgentData.v_spAgent.size() ; i++ ) {
+								const SpAgentState& state = ubAgentData.v_spAgent[i].state;
+								// get the occupation fraction of this agent for the 0,0,0 box which is opposite of the offset.
+								getAgentOccupFrac( -1*xOffset, -1*yOffset, state, frac );
+								
+								// calculate volume
+								r = state.getRadius();
+								agentVol += r * r * r * GEN_PI43*frac;
 
-			const UBAgentData& ubAgentData = *( ubAgentDataPtrNbrBox.getVal( 0, 0, 0 ) );
-
-			/* ---Uptake--- */
-			
-			/* -Uptake Estimate-
-			estimate the total amount of elem to be taken up by cells.
-			*/
-			for( S32 i = 0 ; i < ( S32 )ubAgentData.v_spAgent.size() ; i++ ) {
-				const SpAgentState& state = ubAgentData.v_spAgent[i].state;
-				// caclulate volume
-				REAL r = state.getRadius();
-				agentVol += r * r * r * GEN_PI43;
-				if ( state.getType() == AGENT_YEAST_CELL  ){
-					glucoseEstUptake += CELL_ELEM_CONSTANT_UPTAKE[DIFFUSIBLE_ELEM_GLUCOSE] ; //ng / sec uptake for this cell
+								if (xOffset==0 && yOffset==0){
+									agentVolTest += r * r * r * GEN_PI43;
+									//cout << frac << endl;
+								}
+							}
+						}
+					}
 				}
-			}
 
-			// update volume 
-			v_gridModelRealNbrBox[GRID_MODEL_REAL_AGENT_VOL].setVal( 0, 0, 0, agentVol );
-
-			glucoseEstUptake *= STATE_AND_GRID_TIME_STEP; //ng uptake for cells in this UB
-
-			/* -Uptake Decision- 
-			We have a simple uptake rule, if there is enough take it,
-			comunicate this to cell and allow growth;
-			otherwise do nothing 
-			check if we have enough:
-			*/
-			if ( glucoseEstUptake > GEN_SMALL ) {
-				frac = ( glucoseTotal * MAX_UPTAKE_FRAC  ) / glucoseEstUptake; // fraciton that can be provided 
-			}
-			else {
-				// no glucose needed or glucose will be added, ie we have all that we need or more
-				frac = 2.0; //number just needs to be >=1
-			}
-			if ( frac >= 1.0  ){
-				// indicate that cell uptake was sucessfull in this grid:
-				v_gridModelRealNbrBox[GRID_MODEL_REAL_GLUCOSE_FRAC_AVAILABLE].setVal( 0, 0, 0, 1.0 );
-				v_gridModelRealNbrBox[GRID_MODEL_REAL_GLUCOSE_DELTA].setVal( 0, 0, 0, -1 * glucoseEstUptake );
-				//cout <<glucoseEstUptake<<endl;
-			}
-			else {
-				// indicate that cell uptake is not possible in this grid:
-				v_gridModelRealNbrBox[GRID_MODEL_REAL_GLUCOSE_FRAC_AVAILABLE].setVal( 0, 0, 0, frac );
-				v_gridModelRealNbrBox[GRID_MODEL_REAL_GLUCOSE_DELTA].setVal( 0, 0, 0, ( -1.0 * glucoseTotal * MAX_UPTAKE_FRAC ) );
-				cout <<"glucose uptake not possible for this grid!"<<endl;
-				cout <<"glucose in box "<<glucoseTotal<<endl;
-				cout <<"glucose needed "<<glucoseEstUptake<<endl;
-				cout <<"cells in box "<<ubAgentData.v_spAgent.size()<<endl;
-				cout <<"x "<<vIdx[0]<<endl;
-				cout <<"y "<<vIdx[1]<<endl;
-			}
+				v_gridModelRealNbrBox[GRID_MODEL_REAL_AGENT_VOL_test].setVal( 0, 0, 0, agentVolTest );
+				v_gridModelRealNbrBox[GRID_MODEL_REAL_AGENT_VOL].setVal( 0, 0, 0, agentVol );
 
 
-			/* ---Cell Volume---
-			depricated
-			REAL agentVol = 0;
-			const UBAgentData& ubAgentData = *( ubAgentDataPtrNbrBox.getVal( 0, 0, 0 ) );
-			for( S32 i = 0 ; i < ( S32 )ubAgentData.v_spAgent.size() ; i++ ) {
-				const SpAgentState& state = ubAgentData.v_spAgent[i].state;
-				REAL r = state.getRadius();
-				agentVol += r * r * r * GEN_PI43;
-			}
-			v_gridModelRealNbrBox[GRID_MODEL_REAL_AGENT_VOL].setVal( 0, 0, 0, agentVol );
-			*/
+			} // <-- round 0
 
+		
+			if ( round == 1 ){
+
+
+				/* ---Agent Uptake--- 
+				Only glucose, amount listed in model real,
+				Only feed the cell volume in this grid,
+				Smearing out the cell uptake over all grids the cell resides in.
+				*/
+
+				REAL glucoseEstUptake = 0;
+				REAL frac;
+				REAL glucoseTotal =  v_gridPhiNbrBox[DIFFUSIBLE_ELEM_GLUCOSE].getVal( 0, 0, 0 ) * IF_GRID_SPACING * IF_GRID_SPACING *IF_GRID_SPACING; // ng in UB
+
+				/* Assume all volume is due to yeast cells that have constant identical uptakes
+				and assume that the uptake is defined for yeast cells of critical volume,
+				and that cell uptake changes proportionally to their volume
+				*/
+				CHECK( NUM_AGENT_TYPES == 1);
+				// get cell number based on ratio, small cells count as frac of cell and big cells count more...
+				REAL numCells = v_gridModelRealNbrBox[GRID_MODEL_REAL_AGENT_VOL].getVal( 0, 0, 0 ) / VOL_CRITICAL;
+				glucoseEstUptake = numCells * CELL_ELEM_CONSTANT_UPTAKE[DIFFUSIBLE_ELEM_GLUCOSE] ; //ng / sec uptake for fraction of cells supported in this grid
+
+
+				glucoseEstUptake *= STATE_AND_GRID_TIME_STEP; //ng uptake for cells in this UB
+
+				/* -Uptake Decision- 
+				We have a simple uptake rule, if there is enough take it,
+				comunicate this to cell and allow growth;
+				otherwise do nothing 
+				check if we have enough:
+				*/
+				if ( glucoseEstUptake > GEN_SMALL ) {
+					frac = ( glucoseTotal * MAX_UPTAKE_FRAC  ) / glucoseEstUptake; // fraciton that can be provided 
+				}
+				else {
+					// no glucose needed or glucose will be added, ie we have all that we need or more
+					frac = 2.0; //number just needs to be >=1
+				}
+				if ( frac >= 1.0  ){
+					// indicate that cell uptake was sucessfull in this grid:
+					v_gridModelRealNbrBox[GRID_MODEL_REAL_GLUCOSE_FRAC_AVAILABLE].setVal( 0, 0, 0, 1.0 );
+					v_gridModelRealNbrBox[GRID_MODEL_REAL_GLUCOSE_DELTA].setVal( 0, 0, 0, -1 * glucoseEstUptake );
+					//cout <<glucoseEstUptake<<endl;
+				}
+				else {
+					// indicate that cell uptake is not possible in this grid:
+					v_gridModelRealNbrBox[GRID_MODEL_REAL_GLUCOSE_FRAC_AVAILABLE].setVal( 0, 0, 0, frac );
+					v_gridModelRealNbrBox[GRID_MODEL_REAL_GLUCOSE_DELTA].setVal( 0, 0, 0, ( -1.0 * glucoseTotal * MAX_UPTAKE_FRAC ) );
+					cout <<"glucose uptake not possible for this grid!"<<endl;
+					cout <<"glucose in box "<<glucoseTotal<<endl;
+					cout <<"glucose needed "<<glucoseEstUptake<<endl;
+					cout <<"cells in box "<<numCells<<endl;
+					cout <<"x "<<vIdx[0]<<endl;
+					cout <<"y "<<vIdx[1]<<endl;
+				}
+			} // <-- round 1
 
 		} //<-- pre 
 
@@ -149,7 +192,7 @@ void ModelRoutine::updateIfGridKappa( const VIdx& vIdx, const UBAgentData& ubAge
 
 		REAL volUB = IF_GRID_SPACING * IF_GRID_SPACING * IF_GRID_SPACING;
 		REAL tmpKappa = ( volUB - v_gridModelReal[GRID_MODEL_REAL_AGENT_VOL] ) / volUB ;
-		
+		CHECK ( v_gridModelReal[GRID_MODEL_REAL_AGENT_VOL] >= 0 );
 		if ( tmpKappa > KAPPA_MIN ) {
 			gridKappa = tmpKappa;
 		}
@@ -523,4 +566,68 @@ void ModelRoutine::updatePDEBufferNeumannBCVal( const S32 elemIdx, const VReal& 
 }
 
 
+
+static void getIsHabitable( const VIdx vIdx, BOOL& isHabitable ){
+	/* Custome for this model
+	finds if the box indexed in vIdx is habitable
+	accounts for boundries and chip design.
+	*/
+	isHabitable = false;
+	if ( vIdx[0] >= 0 && vIdx[0] <= (UB_NUM[0] - 1) && vIdx[1] >= 0 && vIdx[1] <= (UB_NUM[1] - 1) && vIdx[2]==0 ){
+		if ( CHIP_DESIGN_MATRIX[vIdx[0]][vIdx[1]] == 1 ) {
+			isHabitable = true;
+		}
+	}
+	return;
+}
+
+static void getIsHabitableArray( const VIdx vIdx, BOOL aa_isHabitable[3][3] ){
+
+	BOOL tmp = 0;
+	VIdx vIdxTmp;
+
+	for ( S32 x_i = 0; x_i < 3; x_i++ ){
+		for ( S32 y_i = 0; y_i < 3; y_i++ ){
+			vIdxTmp = vIdx;
+			vIdxTmp[0] += x_i-1;
+			vIdxTmp[1] += y_i-1;
+			getIsHabitable( vIdxTmp, tmp );
+			aa_isHabitable[x_i][y_i] = tmp;
+		}
+	}
+}
+
+
+static void getAgentOccupFrac( const S32 xOffset, const S32 yOffset, const SpAgentState state, REAL& frac ) {
+	if ( xOffset == -1 && yOffset == -1 ) {
+		frac = state.getModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_0_0 );
+	}
+	else if ( xOffset == -1 && yOffset == 0 ) {
+		frac = state.getModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_0_1 );
+	}
+	else if ( xOffset == -1 && yOffset == 1 ) {
+		frac = state.getModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_0_2 );
+	}
+	else if ( xOffset == 0 && yOffset == -1 ) {
+		frac = state.getModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_1_0 );
+	}
+	else if ( xOffset == 0 && yOffset == 0 ) {
+		frac = state.getModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_1_1 );
+	}
+	else if ( xOffset == 0 && yOffset == 1 ) {
+		frac = state.getModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_1_2 );
+	}
+	else if ( xOffset == 1 && yOffset == -1 ) {
+		frac = state.getModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_2_0 );
+	}
+	else if ( xOffset == 1 && yOffset == 0 ) {
+		frac = state.getModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_2_1 );
+	}
+	else if ( xOffset == 1 && yOffset == 1 ) {
+		frac = state.getModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_2_2 );
+	}
+	else {
+		ERROR( "requested position for agent occupation that does not exist" );
+	}
+}
 

@@ -17,9 +17,16 @@
 using namespace std;
 
 /* Extra Utility Functions */
-static void computeGridDelta( const REAL dir[2], const VReal vOffset, const REAL r, const REAL IF, REAL delta );
+static void computeGridDelta( const REAL dir[2], const VReal vOffset, const REAL r, const REAL IF, REAL& delta );
 
-static void computeOccupFracArray( const VReal vOffset, const REAL r, const REAL IF, REAL aa_occupFrac[3][3] );
+static void computeOccupFracArray( const VReal vOffset, const REAL r, const REAL IF, const BOOL aa_isHabitable[3][3], REAL aa_occupFrac[3][3] );
+
+static void getAgentOccupFrac( const S32 xOffset, const S32 yOffset, const SpAgentState state, REAL& frac );
+
+static void getIsHabitableArray( const VIdx vIdx, BOOL aa_isHabitable[3][3] );
+
+static void getIsHabitable( const VIdx vIdx, BOOL& isHabitable );
+
 
 #if HAS_SPAGENT
 void ModelRoutine::addSpAgents( const BOOL init, const VIdx& startVIdx, const VIdx& regionSize, const IfGridBoxData<BOOL>& ifGridHabitableBoxData, Vector<VIdx>& v_spAgentVIdx, Vector<SpAgentState>& v_spAgentState, Vector<VReal>& v_spAgentOffset ) {
@@ -93,14 +100,57 @@ void ModelRoutine::updateSpAgentState( const VIdx& vIdx, const AgentJunctionInfo
 
 		REAL R0 = state.getRadius();
 		REAL V0 = GEN_PI43 * R0 * R0 * R0;
-		REAL deltaV;
+		REAL deltaV = 0.0;
 
 
 		/* ---Nutriant Uptake--- 
 		Uptake calculated at grid,
-		check if enough or how much was avalible:
+		check if enough or how much was avalible
+		Since the cell uptakes from grids proportional 
+		to its occupation fraction we need to use this 
+		to do a weighted sum of avalibility.
+		Takes from all grids its in.
 		*/
-		REAL fracGlucoseAvail = v_gridModelRealNbrBox[GRID_MODEL_REAL_GLUCOSE_FRAC_AVAILABLE].getVal( 0, 0, 0);
+		REAL fracGlucoseAvail = 0;
+		REAL frac;
+		S32 xOffset;
+		S32 yOffset;
+		BOOL aa_isHabitable[3][3] = {{false,false,false},{false,false,false},{false,false,false}};
+		REAL aa_occupFrac[3][3] = {{0,0,0},{0,0,0},{0,0,0}};
+
+
+		/* ---Occupation Fraction--- */
+
+
+		getIsHabitableArray( vIdx, aa_isHabitable );
+		computeOccupFracArray( offset, R0, IF_GRID_SPACING, aa_isHabitable, aa_occupFrac );
+
+		state.setModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_0_0, aa_occupFrac[0][0] );
+		state.setModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_0_1, aa_occupFrac[0][1] );
+		state.setModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_0_2, aa_occupFrac[0][2] );
+		state.setModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_1_0, aa_occupFrac[1][0] );
+		state.setModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_1_1, aa_occupFrac[1][1] );
+		state.setModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_1_2, aa_occupFrac[1][2] );
+		state.setModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_2_0, aa_occupFrac[2][0] );
+		state.setModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_2_1, aa_occupFrac[2][1] );
+		state.setModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_2_2, aa_occupFrac[2][2] );
+
+
+
+
+		// loop though all the neighbor boxes
+		for ( S32 x_i = 0; x_i < 3; x_i++ ) {
+			for ( S32 y_i = 0; y_i < 3; y_i++ ) {
+				xOffset = x_i - 1;
+				yOffset = y_i - 1;
+				getAgentOccupFrac( xOffset, yOffset, state, frac );
+				
+					
+				if ( frac > GEN_SMALL ){	
+					fracGlucoseAvail += v_gridModelRealNbrBox[GRID_MODEL_REAL_GLUCOSE_FRAC_AVAILABLE].getVal( xOffset, yOffset, 0);
+				}
+			}
+		}
 
 
 		/* ---Growth--- 
@@ -393,20 +443,72 @@ void ModelRoutine::adjustSpAgent( const VIdx& vIdx, const AgentJunctionInfo& jun
 	This funciton is called after th grid updates but before the disp is added
 	so we need to calculate the fraction for the next step, that is we need
 	to manually consider the displacment.
+
+	Something is wrong here, when this goes to update we see a non zero frac
+	for uninhabbitable boxes, but if we calcualte occupFrac in update we 
+	do not see the same issue, so this is not working right.
+	We also see the check below failing ???
 	*/
 	REAL aa_occupFrac[3][3];
+	BOOL aa_isHabitable[3][3];
 	VReal vNewOffset = vOffset + disp;
+	VIdx vNewIdx = vIdx;
 
-	for( S32 dim = 0 ; dim < 3 ; dim++ ) {
-		// dx/dt = 1/c * sum(Force); delta_x = dx/dt*delta_t
-		if ( vNewOffset[dim] > ( 0.5 * IF_GRID_SPACING ) ) {
-			vNewOffset[dim] -= IF_GRID_SPACING;
+
+
+	// calculate new position accounting for hard walls, better way to loop through this but my brain hurts right now
+	
+	if ( vNewOffset[0] > ( 0.5 * IF_GRID_SPACING ) ) {
+		if ( aa_isHabitable[2][1] == true ) {
+			vNewOffset[0] -= IF_GRID_SPACING;
+			vNewIdx[0] += 1;
+			CHECK(v_gridModelRealNbrBox[0].getValidFlag(1,0,0)==true);
 		}
-		if ( vNewOffset[dim] < ( -0.5 * IF_GRID_SPACING ) ) {
-			vNewOffset[dim] += IF_GRID_SPACING;
+		else {
+			vNewOffset[0] = 0.5 * IF_GRID_SPACING;
 		}
 	}
-	computeOccupFracArray( vNewOffset, R0 , IF_GRID_SPACING, aa_occupFrac );
+
+	if ( vNewOffset[0] < ( -0.5 * IF_GRID_SPACING ) ) {
+		if ( aa_isHabitable[0][1] == true ) {
+			vNewOffset[0] += IF_GRID_SPACING;
+			vNewIdx[0] -= 1;
+			CHECK(v_gridModelRealNbrBox[0].getValidFlag(-1,0,0)==true);
+		}
+		else {
+			vNewOffset[0] =  -0.5 * IF_GRID_SPACING;
+		}
+	}
+	if ( vNewOffset[1] > ( 0.5 * IF_GRID_SPACING ) ) {
+		if ( aa_isHabitable[1][2] == true ) {
+			vNewOffset[1] -= IF_GRID_SPACING;
+			vNewIdx[1] += 1;
+			CHECK(v_gridModelRealNbrBox[0].getValidFlag(0,1,0)==true);
+		}
+		else {
+			vNewOffset[1] = 0.5 * IF_GRID_SPACING;
+		}
+	}
+
+	if ( vNewOffset[1] < ( -0.5 * IF_GRID_SPACING ) ) {
+		if ( aa_isHabitable[1][0] == true ) {
+			vNewOffset[1] += IF_GRID_SPACING;
+			vNewIdx[1] -= 1;
+			CHECK(v_gridModelRealNbrBox[0].getValidFlag(0,-1,0)==true);
+		}
+		else {
+			vNewOffset[1] =  -0.5 * IF_GRID_SPACING;
+		}
+	}
+
+
+	getIsHabitableArray( vNewIdx, aa_isHabitable );
+	// the box we will be in must be habitable
+	//CHECK( aa_isHabitable[1][1] == true );
+
+	// calculate the new occupaiton fraction
+	computeOccupFracArray( vNewOffset, R0 , IF_GRID_SPACING, aa_isHabitable, aa_occupFrac );
+
 	// now set them up in memory as model reals
 	
 	state.setModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_0_0, aa_occupFrac[0][0] );
@@ -505,7 +607,7 @@ void ModelRoutine::disappearSpAgent( const VIdx& vIdx, const SpAgent& spAgent, c
 }
 #endif
 /* Extra Utility Functions */
-static void computeGridDelta( const REAL dir[2], const VReal vOffset, const REAL r, const REAL IF, REAL delta ) {
+static void computeGridDelta( const REAL dir[2], const VReal vOffset, const REAL r, const REAL IF, REAL& delta ) {
 	/* Compute specified grid delta, where delta is the overlap distance with the grid.
 	Specifically delta is the difference between the radius and the shortest distance to the 
 	specified grid boundary, edge for direct neighbors and corner for corner neighbors.
@@ -568,10 +670,12 @@ static void computeGridDelta( const REAL dir[2], const VReal vOffset, const REAL
 	}
 
 }
-static void computeOccupFracArray( const VReal vOffset, const REAL r, const REAL IF, REAL aa_occupFrac[3][3]){
+static void computeOccupFracArray( const VReal vOffset, const REAL r, const REAL IF, const BOOL aa_isHabitable[3][3], REAL aa_occupFrac[3][3]){
 	/* Calculate the approximate occupation fraction of this agent in all accessible boxes.
 	Assumes 2d (x,y) and spherical agent centered at offset with radius r.
 	Note the offset for the neighbor grid is determined by -1 to aa index.
+	Here we require the habitability for all neighbor boxes, 
+	if a grid is not habitable no no occupation will be considered for that grid.
 	*/
 	REAL total = 0.0;
 	S32 num = 0;
@@ -581,14 +685,19 @@ static void computeOccupFracArray( const VReal vOffset, const REAL r, const REAL
 
 	for ( S32 x_i = 0; x_i < 3; x_i++ ){
 		for ( S32 y_i = 0; y_i < 3; y_i++ ){
-			delta = 0;
-			gridOffset[0] = x_i-1;
-			gridOffset[1] = y_i-1;
-			computeGridDelta( gridOffset, vOffset, r, IF, delta );
-			if ( delta > GEN_SMALL ) {
-				aa_occupFrac[x_i][y_i] = delta;
-				num += 1;
-				total += delta;
+			if ( aa_isHabitable[x_i][y_i] == true ) {
+				delta = 0;
+				gridOffset[0] = x_i-1;
+				gridOffset[1] = y_i-1;
+				computeGridDelta( gridOffset, vOffset, r, IF, delta );
+				if ( delta > GEN_SMALL ) {
+					aa_occupFrac[x_i][y_i] = delta;
+					num += 1;
+					total += delta;
+				}
+				else {
+					aa_occupFrac[x_i][y_i] = 0;
+				}
 			}
 			else {
 				aa_occupFrac[x_i][y_i] = 0;
@@ -604,11 +713,81 @@ static void computeOccupFracArray( const VReal vOffset, const REAL r, const REAL
 	tmp = ( ( 1.0 + (REAL)num ) * r ) - total;
 	total += tmp;
 	aa_occupFrac[1][1] = tmp;
+	REAL fracTotal = 0;
 
 	for ( S32 x_i = 0; x_i < 3; x_i++ ){
 		for ( S32 y_i = 0; y_i < 3; y_i++ ){
 			aa_occupFrac[x_i][y_i] = aa_occupFrac[x_i][y_i] / total ;
+			fracTotal += aa_occupFrac[x_i][y_i];
 		}
+	}
+	CHECK( FABS( fracTotal - 1.0 ) < GEN_SMALL );
+}
+
+
+
+static void getIsHabitable( const VIdx vIdx, BOOL& isHabitable ){
+	/* Custome for this model
+	finds if the box indexed in vIdx is habitable
+	accounts for boundries and chip design.
+	*/
+	isHabitable = false;
+	if ( vIdx[0] >= 0 && vIdx[0] <= (UB_NUM[0] - 1) && vIdx[1] >= 0 && vIdx[1] <= (UB_NUM[1] - 1) && vIdx[2]==0 ){
+		if ( CHIP_DESIGN_MATRIX[vIdx[0]][vIdx[1]] == 1 ) {
+			isHabitable = true;
+		}
+	}
+	return;
+}
+
+static void getIsHabitableArray( const VIdx vIdx, BOOL aa_isHabitable[3][3] ){
+
+	BOOL tmp = 0;
+	VIdx vIdxTmp;
+
+	for ( S32 x_i = 0; x_i < 3; x_i++ ){
+		for ( S32 y_i = 0; y_i < 3; y_i++ ){
+			vIdxTmp = vIdx;
+			vIdxTmp[0] += x_i-1;
+			vIdxTmp[1] += y_i-1;
+			getIsHabitable( vIdxTmp, tmp );
+			aa_isHabitable[x_i][y_i] = tmp;
+		}
+	}
+}
+	
+	
+
+static void getAgentOccupFrac( const S32 xOffset, const S32 yOffset, const SpAgentState state, REAL& frac ) {
+	if ( xOffset == -1 && yOffset == -1 ) {
+		frac = state.getModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_0_0 );
+	}
+	else if ( xOffset == -1 && yOffset == 0 ) {
+		frac = state.getModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_0_1 );
+	}
+	else if ( xOffset == -1 && yOffset == 1 ) {
+		frac = state.getModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_0_2 );
+	}
+	else if ( xOffset == 0 && yOffset == -1 ) {
+		frac = state.getModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_1_0 );
+	}
+	else if ( xOffset == 0 && yOffset == 0 ) {
+		frac = state.getModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_1_1 );
+	}
+	else if ( xOffset == 0 && yOffset == 1 ) {
+		frac = state.getModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_1_2 );
+	}
+	else if ( xOffset == 1 && yOffset == -1 ) {
+		frac = state.getModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_2_0 );
+	}
+	else if ( xOffset == 1 && yOffset == 0 ) {
+		frac = state.getModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_2_1 );
+	}
+	else if ( xOffset == 1 && yOffset == 1 ) {
+		frac = state.getModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_2_2 );
+	}
+	else {
+		ERROR( "requested position for agent occupation that does not exist" );
 	}
 }
 

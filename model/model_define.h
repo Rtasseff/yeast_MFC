@@ -83,7 +83,8 @@ typedef enum _diffusible_elem_e {
 typedef enum _grid_model_real_e {
 	GRID_MODEL_REAL_GLUCOSE_DELTA, // amount of glucose change in grid
 	GRID_MODEL_REAL_GLUCOSE_FRAC_AVAILABLE, // amount of glucose avalible / needed by agents
-	GRID_MODEL_REAL_AGENT_VOL,
+	GRID_MODEL_REAL_AGENT_VOL,  // grid volume taken up by agents.
+	GRID_MODEL_REAL_AGENT_VOL_test, // volume of of all agents in this grid.
 	NUM_GRID_MODEL_REALS
 } grid_model_real_e;
 
@@ -151,7 +152,7 @@ const REAL BASELINE_TIME_STEP_DURATION = 5; // sec
 was estimated by how much glucose needed for 4 cells in full packed box, kappa = 0.1
 and the effective concentration equal to BC, ie not diffusion limited.
 */
-const S32 NUM_STATE_AND_GRID_TIME_STEPS_PER_BASELINE = 8;
+const S32 NUM_STATE_AND_GRID_TIME_STEPS_PER_BASELINE = 2;
 const REAL STATE_AND_GRID_TIME_STEP = BASELINE_TIME_STEP_DURATION / ( REAL ) NUM_STATE_AND_GRID_TIME_STEPS_PER_BASELINE;
 // maximum displacement per step
 const REAL MAX_DISP = IF_GRID_SPACING; 
@@ -189,7 +190,7 @@ Trapping Chip
 */
 const REAL ADD_WALL = 0.0;//0.5; // additional thickenss to wall in um 
 const S32 UB_NUM[2] = {12,16};
-const S32 CHIP_DESIGN_MATRIX[12][16] =			{{ 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0},
+const S32 CHIP_DESIGN_MATRIX[12][16] =		       {{ 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0},
 							{ 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0},
 							{ 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0},
 							{ 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0},

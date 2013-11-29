@@ -27,7 +27,7 @@ void ModelRoutine::updateSpAgentOutput( const VIdx& vIdx, const SpAgent& spAgent
 			color += 1;
 		}
 	}
-	
+
 	CHECK( v_extra.size() == 0 );
 
 	/* MODEL END */

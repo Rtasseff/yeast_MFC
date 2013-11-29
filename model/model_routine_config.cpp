@@ -25,8 +25,8 @@ void ModelRoutine::updateIfGridSpacing( REAL& ifGridSpacing ) {
 void ModelRoutine::updateOptModelRoutineCallInfo( OptModelRoutineCallInfo& callInfo ) {
 	/* MODEL START */
 
-	callInfo.numUpdateIfGridVarPreStateAndGridStepRounds = 1;
-	callInfo.numUpdateIfGridVarPostStateAndGridStepRounds = 1;
+	callInfo.numUpdateIfGridVarPreStateAndGridStepRounds = 2;
+	callInfo.numUpdateIfGridVarPostStateAndGridStepRounds = 0;
 //	callInfo.numUpdateIfGridVarPreStateAndGridSteps = 1;
 //	callInfo.numUpdateIfGridVarPostStateAndGridSteps = 1;
 
@@ -179,7 +179,7 @@ void ModelRoutine::updatePDEInfo( Vector<PDEInfo>& v_pdeInfo ) {
 void ModelRoutine::updateIfGridModelVarInfo( Vector<IfGridModelVarInfo>& v_ifGridModelRealInfo, Vector<IfGridModelVarInfo>& v_ifGridModelIntInfo ) {
 	/* MODEL START */
 
-	CHECK( NUM_GRID_MODEL_REALS == 3 );
+	CHECK( NUM_GRID_MODEL_REALS == 4 );
 
 	IfGridModelVarInfo info;
 
@@ -198,6 +198,12 @@ void ModelRoutine::updateIfGridModelVarInfo( Vector<IfGridModelVarInfo>& v_ifGri
 	v_ifGridModelRealInfo[GRID_MODEL_REAL_GLUCOSE_FRAC_AVAILABLE] = info;
 
 	info.name = "agent_volume";
+	info.printSummary = true;
+	info.summaryType = SUMMARY_TYPE_SUM;
+
+	v_ifGridModelRealInfo[GRID_MODEL_REAL_AGENT_VOL_test] = info;
+
+	info.name = "excluded_volume";
 	info.printSummary = true;
 	info.summaryType = SUMMARY_TYPE_SUM;
 
