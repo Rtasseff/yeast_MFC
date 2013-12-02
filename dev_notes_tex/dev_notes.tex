@@ -68,12 +68,23 @@ the cells do not start a clock until some $V_C$ is reached;
 3b) completely deterministic mitosis, 
 the cell finishes division after clock hits 1.
 Currently, we have added some additional simplification and assumptions:
-1) cells do not bud they just grow and divide end of cycle,
-this will be improved by forming a junction with m and d cells after g1, 
-which will break after cycle ends,
-unfortunately it may be trick to implement exp vol increase in d based on m vol;
-2) budding is always at same spot so we will track it,
-unfortunately this will not do much until we implement rotation
+\emph{20131125}
+Previous division replaced by budding.
+Budding assumed to start beased on \cite{Charvin2009} at .25.
+All volume donated to bud.
+In this model, a bud is an independent agent,
+and is connected to the mother by a junction end.
+Currently the bud direction is monitored in the cell.
+This is the place where each daughter will bud from.
+In actuality the bud location moves slightly, but that is not captured here.
+Rotation will be included to allow for rotation of the bud direction.
+Daughter bud direction will be set oposite to mother upon bud formation, similar to actual observation.
+Linked mother daughters will have a spring potental that holds them together.
+Currently we do not have a force model for rotation,
+we simply track the direction for future use. 
+The direction for the bud should always be such the direction vector that joins the mother daughter centers.
+This will be the only form of rotation in the model, at this time.
+
 
 \subsection{Physical Environment}
 \emph{20131111} Although the model does contain 3 dimensions,
@@ -105,8 +116,8 @@ Other boundaries will be Numman assuming no flux through walls.
 Currently we treat glucose as only required nutrient.
 We assume uptake is constant.
 Estimates were provided by Gilles Lab to be an uptake of
-$2.5E-12 \frac{g}{min*cell}$ which comes out to 4.2E-5 $\frac{ng}{sec*cell}$.
-The bulk concentration in the flow channel is $20\frac{g}{L}$ which comes to 2E-2 $frac\{ng}{\mu m^3}$.
+$2.5E-12 \frac{g}{min*cell}$ which comes out to 4.17E-2 $\frac{pg}{sec*cell}$.
+The bulk concentration in the flow channel is $20\frac{g}{L}$ which comes to 2E-2 $frac\{pg}{\mu m^3}$.
 
 \subsection{Diffusion}
 Currently we are assuming that only diffusion exists for transport of species in the enviornment.
@@ -121,6 +132,12 @@ We will set diffusion coeffcents to zero at walls of the chip,
 and we will use dirchlet (constant concentration) boundry conditions for the flow channel.
 
 
+\subsection{Uptake}
+A simple stratagy of taking nutriants and then updating the grid is not efficent.
+This would require very small steps.
+Here we will calculate the total uptake for a grid by agents all in updateGridVars.
+This will also include a rough estimation of the diffusion into/out of the currentl location.
+We will then set a grid varraible indicating if we have enough nutriants for uptake. 
 
 \subsection{Mechanical Forces and Interactions}
 Currently, as mentioned above, 
@@ -134,7 +151,45 @@ Displacement will be calculated based on an overdamped system:
 \end{equation}
 where $c$ is the friction coefficient and $F$ is the force, the dot denotes change with respect to time.
 Here a simple finite difference model is used to calculate delta x.
-   
+
+\subsection{Occupation Fraction}
+Each agent's position is defined by a single point.  
+In this simulaiton, using spheres, we take this point as the center.
+Becasue the agents have non zeros volumes they occupy space in the unit boxes (UB).
+While the center is defined in a single UB its likley that the agent overlaps neighbor UBs.
+With larger UBs or less packed systems over larger domains approximating an agent to a single UB may be acceptable,
+here we found it necassary to identify the fraction of overlap in each UB.
+The primary issue is dealing with volume exclusion,
+in some cases 2 agents enter a UB at the same step, 
+which will drastically and suddenly increases the excluded volume and cause errors in the PDE.
+This is artifical due to the discreate nature of assigning the full volume to a single UB.
+Here we approximate the fraction of volume in all neighbor UBs.
+A complete solution is quite cumbersome so here we use an approximation.
+Recall that the grid is regular and square with an edge length => the diameter of the largest agent.
+Here we identify the overlap with nighboring UB's in much the same way as done for estimating physical interactions.
+We find the shortest distance from the agent center to the boundry of the neighbor UB, $d$.
+We then compare this to the radius, $r$.
+If $r>d$, the overlap distance is $\delta = r-d$, and zero otherwise.
+This gives us the overlap with each neighbor.  
+We define the effective internal distance as:
+\begin{equation}
+\delta_0 = (1+n)*r - \sum_i \delta_i,
+\end{equation}
+where $n$ is the number of overlaping neighbors and the sum is carried out over these neighbors.
+This was chosen so that the situation of equally overlap of an agent being on an edge between two UBs ($n=1$) or 
+at a cornner between 4 UBs ($n=3$) $\delta_0=\delta_i$.
+The total is taken as the sum of all $\delta$ adn fractions for each overlap are calculated.
+This fraction is used as the occupation fraciton and is used to divide quantities, like volume, over multpile UBs.
+The solution has 3 primary charictersitcs: 
+(1) it is consistent in the sense that a UB is estimated to have agent overlap iff it actually has overlap,
+this is not meant to imply the foraml numerical concept of consistancy although it may;
+(2) it is contiuous up to the step size, this mean that as an agent travels into a new UB 
+its volume fraction will grow in increments from zero, 
+where these increments can be made arbitrarily small by reducing the time step;
+(3) it conserves the quantities being shared, 
+since we aproximate a fraction for each UB and force the total to be one by deffinition 
+any quantity shared over the UBs using this fraciton will remain constant over all UBs.
+We also note that it is exact in some situations as described above.
  
 
 
@@ -157,7 +212,7 @@ Additional cell properties added under `---Cell Properties--- including
 `-Growth and Division-' properties taken from \cite{Charvin2009} to describe the cell cycle.
 
 Uptake of diffusible elements is also possible,
-Standard constant values are being used for this first impl using \texttt{.
+Standard constant values are being used for this first impl using \texttt{CELL\_ELEM\_CONSTANT\_UPTAKE}.
 Currently we have only one element so its a real, 
 but we should change to array if more are added.
 This would be reflected under `---Difusable elements---'.
