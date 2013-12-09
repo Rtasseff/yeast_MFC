@@ -153,12 +153,14 @@ void ModelRoutine::updateIfGridVar( const BOOL pre, const S32 round, const VIdx&
 					// indicate that cell uptake is not possible in this grid:
 					v_gridModelRealNbrBox[GRID_MODEL_REAL_GLUCOSE_FRAC_AVAILABLE].setVal( 0, 0, 0, frac );
 					v_gridModelRealNbrBox[GRID_MODEL_REAL_GLUCOSE_DELTA].setVal( 0, 0, 0, ( -1.0 * glucoseTotal * MAX_UPTAKE_FRAC ) );
-					cout <<"glucose uptake not possible for this grid!"<<endl;
-					cout <<"glucose in box "<<glucoseTotal<<endl;
-					cout <<"glucose needed "<<glucoseEstUptake<<endl;
-					cout <<"cells in box "<<numCells<<endl;
-					cout <<"x "<<vIdx[0]<<endl;
-					cout <<"y "<<vIdx[1]<<endl;
+					if (WRITE_WARNING==true){
+						cout <<"glucose uptake not possible for this grid!"<<endl;
+						cout <<"glucose in box "<<glucoseTotal<<endl;
+						cout <<"glucose needed "<<glucoseEstUptake<<endl;
+						cout <<"cells in box "<<numCells<<endl;
+						cout <<"x "<<vIdx[0]<<endl;
+						cout <<"y "<<vIdx[1]<<endl;
+					}
 				}
 			} // <-- round 1
 

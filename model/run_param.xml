@@ -18,13 +18,13 @@ Biocellion has three main components.
 <!-- time_step, set the number of baseline time steps, required
 	num_baseline: number of baseline (to simulate 1-2 and 2) time steps, required, integer, [1,)
 -->
-<time_step num_baseline="20000"/>
+<time_step num_baseline="5000"/>
 <!-- domain, parameters describing the simulation domain
 	x: simulation grid size in the x direction, must be an integer multiple of refine_ratio^(number of AMR levels - 1) * 4 (minimum partition size), required, integer, [1,)
 	y: simulation grid size in the y direction, must be an integer multiple of refine_ratio^(number of AMR levels - 1) * 4 (minimum partition size), required, integer, [1,)
 	z: simulation grid size in the z direction, must be an integer multiple of refine_ratio^(number of AMR levels - 1) * 4 (minimum partition size), required, integer, [1,)
 -->
-<domain x="12" y="16" z="4"/>
+<domain x="20" y="16" z="4"/>
 <!-- init_data, parameters related to initial cell and grid data, required
 	partition_size: partition size (for parallel processing, 32 or 64 is a reasonable value in most cases), partition_size should be an integer multiple of refine_ratio^(number of AMR levels - 1) * 4 (minimum partition size), required, integer, [1,)
 	src: initial cell and grid data source, set to code to initialize inside the model code, set to file to read from files, required, code|file

@@ -462,7 +462,7 @@ void ModelRoutine::adjustSpAgent( const VIdx& vIdx, const AgentJunctionInfo& jun
 		if ( aa_isHabitable[2][1] == true ) {
 			vNewOffset[0] -= IF_GRID_SPACING;
 			vNewIdx[0] += 1;
-			CHECK(v_gridModelRealNbrBox[0].getValidFlag(1,0,0)==true);
+			//CHECK(v_gridModelRealNbrBox[0].getValidFlag(1,0,0)==true);
 		}
 		else {
 			vNewOffset[0] = 0.5 * IF_GRID_SPACING;
@@ -473,7 +473,7 @@ void ModelRoutine::adjustSpAgent( const VIdx& vIdx, const AgentJunctionInfo& jun
 		if ( aa_isHabitable[0][1] == true ) {
 			vNewOffset[0] += IF_GRID_SPACING;
 			vNewIdx[0] -= 1;
-			CHECK(v_gridModelRealNbrBox[0].getValidFlag(-1,0,0)==true);
+			//CHECK(v_gridModelRealNbrBox[0].getValidFlag(-1,0,0)==true);
 		}
 		else {
 			vNewOffset[0] =  -0.5 * IF_GRID_SPACING;
@@ -483,7 +483,7 @@ void ModelRoutine::adjustSpAgent( const VIdx& vIdx, const AgentJunctionInfo& jun
 		if ( aa_isHabitable[1][2] == true ) {
 			vNewOffset[1] -= IF_GRID_SPACING;
 			vNewIdx[1] += 1;
-			CHECK(v_gridModelRealNbrBox[0].getValidFlag(0,1,0)==true);
+			//CHECK(v_gridModelRealNbrBox[0].getValidFlag(0,1,0)==true);
 		}
 		else {
 			vNewOffset[1] = 0.5 * IF_GRID_SPACING;
@@ -494,7 +494,7 @@ void ModelRoutine::adjustSpAgent( const VIdx& vIdx, const AgentJunctionInfo& jun
 		if ( aa_isHabitable[1][0] == true ) {
 			vNewOffset[1] += IF_GRID_SPACING;
 			vNewIdx[1] -= 1;
-			CHECK(v_gridModelRealNbrBox[0].getValidFlag(0,-1,0)==true);
+			//CHECK(v_gridModelRealNbrBox[0].getValidFlag(0,-1,0)==true);
 		}
 		else {
 			vNewOffset[1] =  -0.5 * IF_GRID_SPACING;
