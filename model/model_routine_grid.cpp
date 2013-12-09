@@ -13,7 +13,7 @@ static void getIsHabitableArray( const VIdx vIdx, BOOL aa_isHabitable[3][3] );
 
 static void getIsHabitable( const VIdx vIdx, BOOL& isHabitable );
 
-static void getAgentOccupFrac( const S32 xOffset, const S32 yOffset, const SpAgentState state, REAL& frac );
+
 
 
 void ModelRoutine::initIfGridVar( const VIdx& vIdx, const UBAgentData& ubAgentData, Vector<REAL>& v_gridPhi/* [elemIdx] */, Vector<REAL>& v_gridModelReal/* [elemIdx] */, Vector<S32>& v_gridModelInt ) {
@@ -599,37 +599,4 @@ static void getIsHabitableArray( const VIdx vIdx, BOOL aa_isHabitable[3][3] ){
 	}
 }
 
-
-static void getAgentOccupFrac( const S32 xOffset, const S32 yOffset, const SpAgentState state, REAL& frac ) {
-	if ( xOffset == -1 && yOffset == -1 ) {
-		frac = state.getModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_0_0 );
-	}
-	else if ( xOffset == -1 && yOffset == 0 ) {
-		frac = state.getModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_0_1 );
-	}
-	else if ( xOffset == -1 && yOffset == 1 ) {
-		frac = state.getModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_0_2 );
-	}
-	else if ( xOffset == 0 && yOffset == -1 ) {
-		frac = state.getModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_1_0 );
-	}
-	else if ( xOffset == 0 && yOffset == 0 ) {
-		frac = state.getModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_1_1 );
-	}
-	else if ( xOffset == 0 && yOffset == 1 ) {
-		frac = state.getModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_1_2 );
-	}
-	else if ( xOffset == 1 && yOffset == -1 ) {
-		frac = state.getModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_2_0 );
-	}
-	else if ( xOffset == 1 && yOffset == 0 ) {
-		frac = state.getModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_2_1 );
-	}
-	else if ( xOffset == 1 && yOffset == 1 ) {
-		frac = state.getModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_2_2 );
-	}
-	else {
-		ERROR( "requested position for agent occupation that does not exist" );
-	}
-}
 

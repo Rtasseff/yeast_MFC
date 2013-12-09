@@ -19,10 +19,6 @@ using namespace std;
 /* Extra Utility Functions */
 static void computeGridDelta( const REAL dir[2], const VReal vOffset, const REAL r, const REAL IF, REAL& delta );
 
-static void computeOccupFracArray( const VReal vOffset, const REAL r, const REAL IF, const BOOL aa_isHabitable[3][3], REAL aa_occupFrac[3][3] );
-
-static void getAgentOccupFrac( const S32 xOffset, const S32 yOffset, const SpAgentState state, REAL& frac );
-
 static void getIsHabitableArray( const VIdx vIdx, BOOL aa_isHabitable[3][3] );
 
 static void getIsHabitable( const VIdx vIdx, BOOL& isHabitable );
@@ -116,24 +112,13 @@ void ModelRoutine::updateSpAgentState( const VIdx& vIdx, const AgentJunctionInfo
 		S32 xOffset;
 		S32 yOffset;
 		BOOL aa_isHabitable[3][3] = {{false,false,false},{false,false,false},{false,false,false}};
-		REAL aa_occupFrac[3][3] = {{0,0,0},{0,0,0},{0,0,0}};
 
 
 		/* ---Occupation Fraction--- */
 
 
 		getIsHabitableArray( vIdx, aa_isHabitable );
-		computeOccupFracArray( offset, R0, IF_GRID_SPACING, aa_isHabitable, aa_occupFrac );
 
-		state.setModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_0_0, aa_occupFrac[0][0] );
-		state.setModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_0_1, aa_occupFrac[0][1] );
-		state.setModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_0_2, aa_occupFrac[0][2] );
-		state.setModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_1_0, aa_occupFrac[1][0] );
-		state.setModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_1_1, aa_occupFrac[1][1] );
-		state.setModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_1_2, aa_occupFrac[1][2] );
-		state.setModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_2_0, aa_occupFrac[2][0] );
-		state.setModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_2_1, aa_occupFrac[2][1] );
-		state.setModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_2_2, aa_occupFrac[2][2] );
 
 
 
@@ -435,91 +420,6 @@ void ModelRoutine::adjustSpAgent( const VIdx& vIdx, const AgentJunctionInfo& jun
 
 
 	}
-
-
-	/* ---Update Occupation Fraction---
-	We do it here assuming that movment is the largest cause of change
-	in occupation fraction, and that growht in one base step is negligable.
-	This funciton is called after th grid updates but before the disp is added
-	so we need to calculate the fraction for the next step, that is we need
-	to manually consider the displacment.
-
-	Something is wrong here, when this goes to update we see a non zero frac
-	for uninhabbitable boxes, but if we calcualte occupFrac in update we 
-	do not see the same issue, so this is not working right.
-	We also see the check below failing ???
-	*/
-	REAL aa_occupFrac[3][3];
-	BOOL aa_isHabitable[3][3];
-	VReal vNewOffset = vOffset + disp;
-	VIdx vNewIdx = vIdx;
-
-
-
-	// calculate new position accounting for hard walls, better way to loop through this but my brain hurts right now
-	
-	if ( vNewOffset[0] > ( 0.5 * IF_GRID_SPACING ) ) {
-		if ( aa_isHabitable[2][1] == true ) {
-			vNewOffset[0] -= IF_GRID_SPACING;
-			vNewIdx[0] += 1;
-			//CHECK(v_gridModelRealNbrBox[0].getValidFlag(1,0,0)==true);
-		}
-		else {
-			vNewOffset[0] = 0.5 * IF_GRID_SPACING;
-		}
-	}
-
-	if ( vNewOffset[0] < ( -0.5 * IF_GRID_SPACING ) ) {
-		if ( aa_isHabitable[0][1] == true ) {
-			vNewOffset[0] += IF_GRID_SPACING;
-			vNewIdx[0] -= 1;
-			//CHECK(v_gridModelRealNbrBox[0].getValidFlag(-1,0,0)==true);
-		}
-		else {
-			vNewOffset[0] =  -0.5 * IF_GRID_SPACING;
-		}
-	}
-	if ( vNewOffset[1] > ( 0.5 * IF_GRID_SPACING ) ) {
-		if ( aa_isHabitable[1][2] == true ) {
-			vNewOffset[1] -= IF_GRID_SPACING;
-			vNewIdx[1] += 1;
-			//CHECK(v_gridModelRealNbrBox[0].getValidFlag(0,1,0)==true);
-		}
-		else {
-			vNewOffset[1] = 0.5 * IF_GRID_SPACING;
-		}
-	}
-
-	if ( vNewOffset[1] < ( -0.5 * IF_GRID_SPACING ) ) {
-		if ( aa_isHabitable[1][0] == true ) {
-			vNewOffset[1] += IF_GRID_SPACING;
-			vNewIdx[1] -= 1;
-			//CHECK(v_gridModelRealNbrBox[0].getValidFlag(0,-1,0)==true);
-		}
-		else {
-			vNewOffset[1] =  -0.5 * IF_GRID_SPACING;
-		}
-	}
-
-
-	getIsHabitableArray( vNewIdx, aa_isHabitable );
-	// the box we will be in must be habitable
-	//CHECK( aa_isHabitable[1][1] == true );
-
-	// calculate the new occupaiton fraction
-	computeOccupFracArray( vNewOffset, R0 , IF_GRID_SPACING, aa_isHabitable, aa_occupFrac );
-
-	// now set them up in memory as model reals
-	
-	state.setModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_0_0, aa_occupFrac[0][0] );
-	state.setModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_0_1, aa_occupFrac[0][1] );
-	state.setModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_0_2, aa_occupFrac[0][2] );
-	state.setModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_1_0, aa_occupFrac[1][0] );
-	state.setModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_1_1, aa_occupFrac[1][1] );
-	state.setModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_1_2, aa_occupFrac[1][2] );
-	state.setModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_2_0, aa_occupFrac[2][0] );
-	state.setModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_2_1, aa_occupFrac[2][1] );
-	state.setModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_2_2, aa_occupFrac[2][2] );
 
 	
 

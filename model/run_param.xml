@@ -18,7 +18,7 @@ Biocellion has three main components.
 <!-- time_step, set the number of baseline time steps, required
 	num_baseline: number of baseline (to simulate 1-2 and 2) time steps, required, integer, [1,)
 -->
-<time_step num_baseline="5000"/>
+<time_step num_baseline="10000"/>
 <!-- domain, parameters describing the simulation domain
 	x: simulation grid size in the x direction, must be an integer multiple of refine_ratio^(number of AMR levels - 1) * 4 (minimum partition size), required, integer, [1,)
 	y: simulation grid size in the y direction, must be an integer multiple of refine_ratio^(number of AMR levels - 1) * 4 (minimum partition size), required, integer, [1,)
