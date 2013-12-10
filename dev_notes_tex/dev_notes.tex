@@ -128,16 +128,33 @@ J = D ( \frac{\phi_0}{\kappa_0} - \frac{\phi_1}{\kappa_1} ) \frac{1}{h}
 \label{EQ:diff}
 \end{equation}
 
-We will set diffusion coeffcents to zero at walls of the chip,
-and we will use dirchlet (constant concentration) boundry conditions for the flow channel.
+We will set diffusion coefficients to zero at walls of the chip,
+and we will use dirchlet (constant concentration) boundary conditions for the flow channel.
 
 
 \subsection{Uptake}
-A simple stratagy of taking nutriants and then updating the grid is not efficent.
-This would require very small steps.
-Here we will calculate the total uptake for a grid by agents all in updateGridVars.
-This will also include a rough estimation of the diffusion into/out of the currentl location.
-We will then set a grid varraible indicating if we have enough nutriants for uptake. 
+Calculating nutrient uptake at the agent level only produces errors, as uptake is too high when multiple agents are present.
+Here we have used a strategy to calculate the total uptake for a grid by all agents using updateGridVars.
+That is the logic needs to be known for grid updates, not the agent.
+We then set a variable indicating what fraction of needed uptake is available,
+the delta or sink term is also calculated here to reflect this fraction.
+The logic to determine agent uptake is quite simple and basically assumes uptake is proportional to cell volume;
+reasonable given that growth is exponential.
+We note that a lower limit has been set on total uptake from a grid,
+that is you cannot take everything from a gird.
+This is a relative limit so at low levels the cell uptake follows first order kinetics.
+Together this is similar to saturation kinetics.
+\textbf{NOTE:} One additional approximation is for cells bound by a bud.
+For the gird, uptake is assumed to take place based on where the cells are, independently;
+however, for growth, the daughter agent grows wrt volume of each bound cell, 
+and the amount available is based on the daughters location.
+This simplifies complex communications between the mother and daughter.
+If mother and daughter exist in grids with similar nutrient levels, 
+this will have minimal impact;
+otherwise, cells will grow disproportionally to the uptake.
+\textbf{NOTE:} We could also include a rough estimation of the diffusion into/out of the current location.  
+Currently the max time step is limited to what is required for resolving movement, not uptake.
+
 
 \subsection{Mechanical Forces and Interactions}
 Currently, as mentioned above, 
@@ -153,6 +170,26 @@ where $c$ is the friction coefficient and $F$ is the force, the dot denotes chan
 Here a simple finite difference model is used to calculate delta x.
 
 \subsection{Occupation Fraction}
+\emph{20131210}
+SK has developed a new method to identify the occupation fraction of a sphere in a unit box.
+This method is quick and now standard so we will employ it here.
+We will call the calculation in both the \textit{updateSpAgentState()} and the \textit{updateIfGridVar} methods.
+For simplicity, we will not save fractions to model variables.
+The method subdivides the UB into grids to do the calculation,
+we are using level 4 which is a $16^3$ subdivision of the UB. 
+\textbf{NOTE:} The down side is that the current method does not redistribute volume 
+in uninhabitable areas to habitable ones.
+For example if a yeast cell is technically overlapping an uninhabitable area,
+one interpretation is that it is being deformed, but the volume exclusion remains the same.
+In this case we could redistribute volume to habitable areas.  
+Without doing this, we are assume a deformation of the domain that is not constant wrt volume.
+This will throw off calculations like how much uptake an agent has if it is overlapping an uninhabitable area.
+A fix would be to calculate on all surrounding grids then renormalise all fractions.
+This requires additional calculations, 
+especially in the grid update step where neighbor fractions are not directly used.
+We will not implement this unless necessary.
+
+\textbf{Old Method, Dpericated on 20131210-->:}
 Each agent's position is defined by a single point.  
 In this simulation, using spheres, we take this point as the center.
 Because the agents have non zeros volumes they occupy space in the unit boxes (UB).
@@ -191,7 +228,7 @@ where these increments can be made arbitrarily small by reducing the time step;
 since we approximate a fraction for each UB and force the total to be one by definition 
 any quantity shared over the UBs using this fraction will remain constant over all UBs.
 We also note that it is exact in some situations as described above.
- 
+\textbf{:<--Old Method, Dpericated on 20131210}
 
 
 \section{Initialization}
