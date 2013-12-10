@@ -138,12 +138,12 @@ const REAL CELL_ELEM_CONSTANT_UPTAKE[NUM_DIFFUSIBLE_ELEMS] = {4.17e-2}; // pg/(s
 
 /* ---Domain--- */
 const REAL IF_GRID_SPACING = CELL_INTRCT_DIST_MAX;/* this should be equal to or larger than MAX_CELL_RADIUS * 2.0, domain size in the xml file = 128 * 128 * 4928 */
-const REAL BASELINE_TIME_STEP_DURATION = 2.5; // sec
+const REAL BASELINE_TIME_STEP_DURATION = 0.5; // sec
 /* grid steps for balancing diffusion and uptake,
 was estimated by how much glucose needed for 4 cells in full packed box, kappa = 0.1
 and the effective concentration equal to BC, ie not diffusion limited.
 */
-const S32 NUM_STATE_AND_GRID_TIME_STEPS_PER_BASELINE = 2;
+const S32 NUM_STATE_AND_GRID_TIME_STEPS_PER_BASELINE = 1;
 const REAL STATE_AND_GRID_TIME_STEP = BASELINE_TIME_STEP_DURATION / ( REAL ) NUM_STATE_AND_GRID_TIME_STEPS_PER_BASELINE;
 // maximum displacement per step
 const REAL MAX_DISP = IF_GRID_SPACING; 
@@ -179,7 +179,7 @@ Trapping Chip
 11 in x, 15 in Y
 5 by 5 block uninhabitable in each corrner.
 */
-const REAL ADD_WALL = 0.1;//0.5; // additional thickenss to wall in um 
+const REAL ADD_WALL = .2;//0.5; // additional thickenss to wall in um 
 const S32 UB_NUM[2] = {20,16};
 const S32 CHIP_DESIGN_MATRIX[20][16] =		       {{ 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0},
 							{ 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0},
