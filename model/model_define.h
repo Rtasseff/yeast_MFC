@@ -97,7 +97,7 @@ const REAL GEN_PI = 3.14159265359;
 const REAL GEN_PI43 = (4.0/3.0)*GEN_PI;
 const REAL GEN_SMALL = 1.0E-10;
 const REAL GEN_EPS = 1E-52;
-const BOOL WRITE_WARNING = false; // set to one to write modeling warnings, set to 0 to ignore.
+const BOOL WRITE_WARNING = true; // set to one to write modeling warnings, set to 0 to ignore.
 
 
 /* ---Diffusion--- */
@@ -127,7 +127,7 @@ const REAL CC_CLOCK_G1 = .25; // cite Charvin2009, end of g1 and start of bud fo
 const REAL CC_CLOCK_CRITICAL = 1.0; // cite Charvin2009
 /* -physical properties- */
 // maximum radius we are expecting for yeast cell, 2x volume:
-const REAL CELL_R_MAX = 1.05*R_CRITICAL; //1.2599*R_CRITICAL;
+const REAL CELL_R_MAX = 2.4;//1.1*R_CRITICAL; //1.2599*R_CRITICAL;
 // Maximum interaction distance for 2 cells
 const REAL CELL_INTRCT_DIST_MAX = 2.0*CELL_R_MAX;
 // standard uptake of difusable elements 
@@ -150,6 +150,7 @@ const REAL MAX_DISP = IF_GRID_SPACING;
 /* -Grid Properties- */
 const S32 NUM_AMR_LEVELS = 1;
 const S32 NUM_PDE_TIME_STEPS_PER_STATE_AND_GRID_STEP = 1;
+const S32 OVLP_MAX_LEVEL = 4; //number of max leves for determining agent overlap
 
 
 /* ---Cell Properties 2--- */
@@ -179,7 +180,7 @@ Trapping Chip
 11 in x, 15 in Y
 5 by 5 block uninhabitable in each corrner.
 */
-const REAL ADD_WALL = .2;//0.5; // additional thickenss to wall in um 
+const REAL ADD_WALL = ( IF_GRID_SPACING / 2.0 ) - R_CRITICAL ;//0.5; // additional thickenss to wall in um, make trap size of typical cell 
 const S32 UB_NUM[2] = {20,16};
 const S32 CHIP_DESIGN_MATRIX[20][16] =		       {{ 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0},
 							{ 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0},

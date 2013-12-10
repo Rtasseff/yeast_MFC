@@ -17,7 +17,6 @@
 using namespace std;
 
 /* Extra Utility Functions */
-static void computeGridDelta( const REAL dir[2], const VReal vOffset, const REAL r, const REAL IF, REAL& delta );
 
 static void getIsHabitableArray( const VIdx vIdx, BOOL aa_isHabitable[3][3] );
 
@@ -47,15 +46,13 @@ void ModelRoutine::addSpAgents( const BOOL init, const VIdx& startVIdx, const VI
 			// set up the state
 			state.setType( AGENT_YEAST_CELL );
 			state.setRadius( radius );
-			CHECK ( NUM_YEAST_CELL_MODEL_REALS == 12 );
+			CHECK ( NUM_YEAST_CELL_MODEL_REALS == 3 );
 			for ( S32 i = 0; i < NUM_YEAST_CELL_MODEL_REALS; i++ ) {
 				state.setModelReal( i, 0 );
 			}
 			// set a direction for budding 
 			state.setModelReal( YEAST_CELL_MODEL_REAL_BUD_DIR_X, -0.7071 );
 			state.setModelReal( YEAST_CELL_MODEL_REAL_BUD_DIR_Y, -0.7071 );
-			// set agent to fully occupy the center box
-			state.setModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_1_1, 1.0 );
 
 			CHECK ( NUM_YEAST_CELL_MODEL_INTS == 1 );
 			for ( S32 i = 0; i < NUM_YEAST_CELL_MODEL_INTS; i++ ) {
@@ -109,32 +106,46 @@ void ModelRoutine::updateSpAgentState( const VIdx& vIdx, const AgentJunctionInfo
 		*/
 		REAL fracGlucoseAvail = 0;
 		REAL frac;
+		REAL fracSum = 0;
 		S32 xOffset;
 		S32 yOffset;
+		VIdx ubVIdxOffset;
 		BOOL aa_isHabitable[3][3] = {{false,false,false},{false,false,false},{false,false,false}};
-
-
-		/* ---Occupation Fraction--- */
-
-
 		getIsHabitableArray( vIdx, aa_isHabitable );
 
 
-
-
+		/* ---Avalible Glucose--- 
+		Here we calcualte the glucose available to this agent
+		Since we have already calculated the fraction availible in each grid (based on all agents)
+		and we have a fraction needed for this agent and all grids,
+		we must calcualte a weighted fraction of glucose avalible.
+		*/
 
 		// loop though all the neighbor boxes
 		for ( S32 x_i = 0; x_i < 3; x_i++ ) {
 			for ( S32 y_i = 0; y_i < 3; y_i++ ) {
 				xOffset = x_i - 1;
 				yOffset = y_i - 1;
-				getAgentOccupFrac( xOffset, yOffset, state, frac );
-				
-					
-				if ( frac > GEN_SMALL ){	
-					fracGlucoseAvail += v_gridModelRealNbrBox[GRID_MODEL_REAL_GLUCOSE_FRAC_AVAILABLE].getVal( xOffset, yOffset, 0);
+								
+				if ( aa_isHabitable[x_i][y_i]==true ){
+					ubVIdxOffset[0] = xOffset;
+					ubVIdxOffset[1] = yOffset;
+					ubVIdxOffset[2] = 0;
+
+					// calculate fraction of overlap for this box 
+					frac = Util::computeSphereUBVolOvlpRatio( OVLP_MAX_LEVEL, offset, R0, ubVIdxOffset );
+					CHECK( frac <= 1 && frac >= 0 );
+					fracSum += frac;
+					fracGlucoseAvail += frac*v_gridModelRealNbrBox[GRID_MODEL_REAL_GLUCOSE_FRAC_AVAILABLE].getVal( xOffset, yOffset, 0);
 				}
 			}
+		}
+		
+		
+		// fraction can be off if overlapping uninhabitable regions, lets see by how much
+		CHECK( fracSum <= ( 1 + GEN_SMALL ) );
+		if ( fracSum < ( 1 - GEN_SMALL ) && WRITE_WARNING ) {
+			cout << "WARNING:MRA_USAS_0001 - Not all of agent volume is accounted for, frac = "<<fracSum<<endl;
 		}
 
 
@@ -469,14 +480,13 @@ void ModelRoutine::divideSpAgent( const VIdx& vIdx, const AgentJunctionInfo& jun
 	daughterDisp[2] = 0.0;
 
 	// set up state for daughter	
-	CHECK( NUM_YEAST_CELL_MODEL_REALS==12 );
+	CHECK( NUM_YEAST_CELL_MODEL_REALS==3 );
 	for ( S32 i = 0; i < NUM_YEAST_CELL_MODEL_REALS; i++ ) {
 		daughterState.setModelReal( i, 0 );
 	}
 	daughterState.setModelReal(YEAST_CELL_MODEL_REAL_BUD_DIR_X, -1.0 * motherState.getModelReal( YEAST_CELL_MODEL_REAL_BUD_DIR_X ) );
 	daughterState.setModelReal(YEAST_CELL_MODEL_REAL_BUD_DIR_Y, -1.0 * motherState.getModelReal( YEAST_CELL_MODEL_REAL_BUD_DIR_Y ) );
 	// set agent to fully occupy the center box
-	daughterState.setModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_1_1, 1.0 );
 
 	CHECK( NUM_YEAST_CELL_MODEL_INTS == 1 );
 	daughterState.setModelInt( YEAST_CELL_MODEL_INT_MOTHER, 0 );
@@ -507,123 +517,6 @@ void ModelRoutine::disappearSpAgent( const VIdx& vIdx, const SpAgent& spAgent, c
 }
 #endif
 /* Extra Utility Functions */
-static void computeGridDelta( const REAL dir[2], const VReal vOffset, const REAL r, const REAL IF, REAL& delta ) {
-	/* Compute specified grid delta, where delta is the overlap distance with the grid.
-	Specifically delta is the difference between the radius and the shortest distance to the 
-	specified grid boundary, edge for direct neighbors and corner for corner neighbors.
-	If the agent is a sphere then delta is the maximum distance within the grid on a line
-	that goes from the agent center to the agent boundary, or maximum overlap distance.
-	Can be used to calculate overlap for mechanical force interactions, or overlap
-	for use in estimating the occupation fraction.
-	Use dir to specify neighbor grid as upper (1) or lower (-1) for each dimension (x,y) or zero to ignore that dimension.
-	vOffset is agent offset at center box
-	r is agent radius 
-	IF is the interface Grid spacing 
-	Will return zero for the center UB {0,0}.
-	*/
-
-	/* this could be done in shorter code by calculating the DHat and setting dist to sqrt(sum(DHat**2))
-	but we want to avoid squaring and rooting when possible.
-	*/
-
-	if (dir[0] == 0 && dir[1] == 0 ) {
-		delta = 0.0;
-	}
-	else {
-		REAL DHat[2] = {0,0};
-		REAL b = 0;
-		REAL dist = 0;
-
-		for( S32 dim = 0 ; dim < 2 ; dim++ ) {
-			if ( dir[dim]== 1 || dir[dim] == -1 ) {
-				// boundary location in this dim
-				b = ( ( REAL ) dir[dim] ) * 0.5 * IF;
-				// subtract locations in this dim
-				DHat[dim] = vOffset[dim] - b;
-			}
-			else if ( dir[dim] != 0 ) {
-				cout << dir[dim] <<endl;
-				ERROR ( "Incorrect neighbor specification in dir in computeGridDelta" );
-			}
-		}
-		if ( dir[0]==0 ) {
-			//dim 1 must be not zero
-			dist = FABS(DHat[1]);
-		}
-		else if ( dir[1]==0 ) {
-			//dim 0 must be not zero
-			dist = FABS(DHat[0]);
-		}
-		else {
-			// corner
-			dist = SQRT ( DHat[0]*DHat[0] + DHat[1]*DHat[1] );
-		}
-
-		if ( r > dist ) {
-			delta = r - dist;
-		}
-		else {
-			delta = 0.0;
-		}
-
-
-	}
-
-}
-static void computeOccupFracArray( const VReal vOffset, const REAL r, const REAL IF, const BOOL aa_isHabitable[3][3], REAL aa_occupFrac[3][3]){
-	/* Calculate the approximate occupation fraction of this agent in all accessible boxes.
-	Assumes 2d (x,y) and spherical agent centered at offset with radius r.
-	Note the offset for the neighbor grid is determined by -1 to aa index.
-	Here we require the habitability for all neighbor boxes, 
-	if a grid is not habitable no no occupation will be considered for that grid.
-	*/
-	REAL total = 0.0;
-	S32 num = 0;
-	REAL delta;
-	REAL tmp;
-	REAL gridOffset[2] = {0,0};
-
-	for ( S32 x_i = 0; x_i < 3; x_i++ ){
-		for ( S32 y_i = 0; y_i < 3; y_i++ ){
-			if ( aa_isHabitable[x_i][y_i] == true ) {
-				delta = 0;
-				gridOffset[0] = x_i-1;
-				gridOffset[1] = y_i-1;
-				computeGridDelta( gridOffset, vOffset, r, IF, delta );
-				if ( delta > GEN_SMALL ) {
-					aa_occupFrac[x_i][y_i] = delta;
-					num += 1;
-					total += delta;
-				}
-				else {
-					aa_occupFrac[x_i][y_i] = 0;
-				}
-			}
-			else {
-				aa_occupFrac[x_i][y_i] = 0;
-			}
-		}
-	}
-	/* center box always is zero, need to calculate based on others,
-	this is an approximate function chosen so that an agent with center on 
-	an edge between 2 grids or at a corner for 4 grids will 
-	have equal sharing with all overlapping grids.
-	*/
-
-	tmp = ( ( 1.0 + (REAL)num ) * r ) - total;
-	total += tmp;
-	aa_occupFrac[1][1] = tmp;
-	REAL fracTotal = 0;
-
-	for ( S32 x_i = 0; x_i < 3; x_i++ ){
-		for ( S32 y_i = 0; y_i < 3; y_i++ ){
-			aa_occupFrac[x_i][y_i] = aa_occupFrac[x_i][y_i] / total ;
-			fracTotal += aa_occupFrac[x_i][y_i];
-		}
-	}
-	CHECK( FABS( fracTotal - 1.0 ) < GEN_SMALL );
-}
-
 
 
 static void getIsHabitable( const VIdx vIdx, BOOL& isHabitable ){
@@ -657,37 +550,4 @@ static void getIsHabitableArray( const VIdx vIdx, BOOL aa_isHabitable[3][3] ){
 }
 	
 	
-
-static void getAgentOccupFrac( const S32 xOffset, const S32 yOffset, const SpAgentState state, REAL& frac ) {
-	if ( xOffset == -1 && yOffset == -1 ) {
-		frac = state.getModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_0_0 );
-	}
-	else if ( xOffset == -1 && yOffset == 0 ) {
-		frac = state.getModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_0_1 );
-	}
-	else if ( xOffset == -1 && yOffset == 1 ) {
-		frac = state.getModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_0_2 );
-	}
-	else if ( xOffset == 0 && yOffset == -1 ) {
-		frac = state.getModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_1_0 );
-	}
-	else if ( xOffset == 0 && yOffset == 0 ) {
-		frac = state.getModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_1_1 );
-	}
-	else if ( xOffset == 0 && yOffset == 1 ) {
-		frac = state.getModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_1_2 );
-	}
-	else if ( xOffset == 1 && yOffset == -1 ) {
-		frac = state.getModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_2_0 );
-	}
-	else if ( xOffset == 1 && yOffset == 0 ) {
-		frac = state.getModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_2_1 );
-	}
-	else if ( xOffset == 1 && yOffset == 1 ) {
-		frac = state.getModelReal( YEAST_CELL_MODEL_REAL_OCCUP_FRAC_2_2 );
-	}
-	else {
-		ERROR( "requested position for agent occupation that does not exist" );
-	}
-}
 

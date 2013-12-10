@@ -45,6 +45,7 @@ void ModelRoutine::updateIfGridVar( const BOOL pre, const S32 round, const VIdx&
 	/* MODEL START */
 
 	CHECK( NUM_DIFFUSIBLE_ELEMS == 1 );
+	CHECK( round == 0 );
 
 	// only z=0 is real, others are dummies
 	if( CHIP_DESIGN_MATRIX[vIdx[0]][vIdx[1]]==1 && vIdx[2] == 0 ){
@@ -61,6 +62,7 @@ void ModelRoutine::updateIfGridVar( const BOOL pre, const S32 round, const VIdx&
 				REAL frac;
 				S32 xOffset;
 				S32 yOffset;
+				VIdx ubVIdxOffset;
 				BOOL aa_isHabitable[3][3] = {{false,false,false},{false,false,false},{false,false,false}};
 				
 				getIsHabitableArray( vIdx, aa_isHabitable );
@@ -77,13 +79,16 @@ void ModelRoutine::updateIfGridVar( const BOOL pre, const S32 round, const VIdx&
 						xOffset = x_i - 1;
 						yOffset = y_i - 1;
 						if ( aa_isHabitable[x_i][y_i] == true ) {
+							// set offset wrt agent wich is opposite:
+							ubVIdxOffset[0] = -1*xOffset;
+							ubVIdxOffset[1] = -1*yOffset;
+							ubVIdxOffset[2] = 0;
 							// get all agents in the current grid
 							CHECK ( ubAgentDataPtrNbrBox.getValidFlag( xOffset, yOffset, 0 ) == true );
 							const UBAgentData& ubAgentData = *( ubAgentDataPtrNbrBox.getVal( xOffset, yOffset, 0 ) );
 							for( S32 i = 0 ; i < ( S32 )ubAgentData.v_spAgent.size() ; i++ ) {
 								const SpAgentState& state = ubAgentData.v_spAgent[i].state;
-								// get the occupation fraction of this agent for the 0,0,0 box which is opposite of the offset.
-								getAgentOccupFrac( -1*xOffset, -1*yOffset, state, frac );
+								frac = Util::computeSphereUBVolOvlpRatio( OVLP_MAX_LEVEL, ubAgentData.v_spAgent[i].vOffset, ubAgentData.v_spAgent[i].state.getRadius(), ubVIdxOffset );
 								
 								// calculate volume
 								r = state.getRadius();
@@ -102,12 +107,6 @@ void ModelRoutine::updateIfGridVar( const BOOL pre, const S32 round, const VIdx&
 				v_gridModelRealNbrBox[GRID_MODEL_REAL_AGENT_VOL].setVal( 0, 0, 0, agentVol );
 
 
-			} // <-- round 0
-
-		
-			if ( round == 1 ){
-
-
 				/* ---Agent Uptake--- 
 				Only glucose, amount listed in model real,
 				Only feed the cell volume in this grid,
@@ -115,8 +114,9 @@ void ModelRoutine::updateIfGridVar( const BOOL pre, const S32 round, const VIdx&
 				*/
 
 				REAL glucoseEstUptake = 0;
-				REAL frac;
-				REAL glucoseTotal =  v_gridPhiNbrBox[DIFFUSIBLE_ELEM_GLUCOSE].getVal( 0, 0, 0 ) * IF_GRID_SPACING * IF_GRID_SPACING *IF_GRID_SPACING; // ng in UB
+				REAL fracGlucoseUptake = 0;
+				REAL numCells;
+				REAL glucoseTotal =  v_gridPhiNbrBox[DIFFUSIBLE_ELEM_GLUCOSE].getVal( 0, 0, 0 ) * IF_GRID_SPACING * IF_GRID_SPACING *IF_GRID_SPACING; // pg in UB
 
 				/* Assume all volume is due to yeast cells that have constant identical uptakes
 				and assume that the uptake is defined for yeast cells of critical volume,
@@ -124,26 +124,25 @@ void ModelRoutine::updateIfGridVar( const BOOL pre, const S32 round, const VIdx&
 				*/
 				CHECK( NUM_AGENT_TYPES == 1);
 				// get cell number based on ratio, small cells count as frac of cell and big cells count more...
-				REAL numCells = v_gridModelRealNbrBox[GRID_MODEL_REAL_AGENT_VOL].getVal( 0, 0, 0 ) / VOL_CRITICAL;
-				glucoseEstUptake = numCells * CELL_ELEM_CONSTANT_UPTAKE[DIFFUSIBLE_ELEM_GLUCOSE] ; //ng / sec uptake for fraction of cells supported in this grid
-
-
-				glucoseEstUptake *= STATE_AND_GRID_TIME_STEP; //ng uptake for cells in this UB
+				numCells = agentVol / VOL_CRITICAL;
+				glucoseEstUptake = numCells * CELL_ELEM_CONSTANT_UPTAKE[DIFFUSIBLE_ELEM_GLUCOSE] ; //pg / sec uptake for fraction of cells supported in this grid
+				glucoseEstUptake *= STATE_AND_GRID_TIME_STEP; //pg uptake for cells in this UB
 
 				/* -Uptake Decision- 
-				We have a simple uptake rule, if there is enough take it,
-				comunicate this to cell and allow growth;
-				otherwise do nothing 
-				check if we have enough:
+				Cells are estimated by actual cell volume in grid compared to typical volume of 1 cell.
+				In saturated conditions uptake is proportiational to number of typical cells.
+				In unsaturated conditions we limit total uptake levels, similar to first order kinetics.
+				Together these rules give approximate saturation kinetics with v_max proportional to cell volume.
+				
 				*/
 				if ( glucoseEstUptake > GEN_SMALL ) {
-					frac = ( glucoseTotal * MAX_UPTAKE_FRAC  ) / glucoseEstUptake; // fraciton that can be provided 
+					fracGlucoseUptake = ( glucoseTotal * MAX_UPTAKE_FRAC  ) / glucoseEstUptake; // fraciton that can be provided 
 				}
 				else {
-					// no glucose needed or glucose will be added, ie we have all that we need or more
-					frac = 2.0; //number just needs to be >=1
+					// no glucose needed or glucose will be added, ie we have all that we need
+					fracGlucoseUptake = 2.0; //number just needs to be >=1
 				}
-				if ( frac >= 1.0  ){
+				if ( fracGlucoseUptake >= 1.0  ){
 					// indicate that cell uptake was sucessfull in this grid:
 					v_gridModelRealNbrBox[GRID_MODEL_REAL_GLUCOSE_FRAC_AVAILABLE].setVal( 0, 0, 0, 1.0 );
 					v_gridModelRealNbrBox[GRID_MODEL_REAL_GLUCOSE_DELTA].setVal( 0, 0, 0, -1 * glucoseEstUptake );
@@ -151,7 +150,7 @@ void ModelRoutine::updateIfGridVar( const BOOL pre, const S32 round, const VIdx&
 				}
 				else {
 					// indicate that cell uptake is not possible in this grid:
-					v_gridModelRealNbrBox[GRID_MODEL_REAL_GLUCOSE_FRAC_AVAILABLE].setVal( 0, 0, 0, frac );
+					v_gridModelRealNbrBox[GRID_MODEL_REAL_GLUCOSE_FRAC_AVAILABLE].setVal( 0, 0, 0, fracGlucoseUptake );
 					v_gridModelRealNbrBox[GRID_MODEL_REAL_GLUCOSE_DELTA].setVal( 0, 0, 0, ( -1.0 * glucoseTotal * MAX_UPTAKE_FRAC ) );
 					if (WRITE_WARNING==true){
 						cout <<"glucose uptake not possible for this grid!"<<endl;
@@ -162,7 +161,7 @@ void ModelRoutine::updateIfGridVar( const BOOL pre, const S32 round, const VIdx&
 						cout <<"y "<<vIdx[1]<<endl;
 					}
 				}
-			} // <-- round 1
+			} // <-- round 0
 
 		} //<-- pre 
 

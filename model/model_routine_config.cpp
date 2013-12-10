@@ -25,7 +25,7 @@ void ModelRoutine::updateIfGridSpacing( REAL& ifGridSpacing ) {
 void ModelRoutine::updateOptModelRoutineCallInfo( OptModelRoutineCallInfo& callInfo ) {
 	/* MODEL START */
 
-	callInfo.numUpdateIfGridVarPreStateAndGridStepRounds = 2;
+	callInfo.numUpdateIfGridVarPreStateAndGridStepRounds = 1;
 	callInfo.numUpdateIfGridVarPostStateAndGridStepRounds = 0;
 //	callInfo.numUpdateIfGridVarPreStateAndGridSteps = 1;
 //	callInfo.numUpdateIfGridVarPostStateAndGridSteps = 1;
