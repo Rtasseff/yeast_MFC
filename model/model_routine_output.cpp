@@ -28,7 +28,9 @@ void ModelRoutine::updateSpAgentOutput( const VIdx& vIdx, const SpAgent& spAgent
 		}
 	}
 
-	CHECK( v_extra.size() == 0 );
+	CHECK( NUM_OUTPUT_MODEL_REALS == 2 );
+	v_extra[OUTPUT_MODEL_REAL_BUD_DIR_X] = spAgent.state.getModelReal( YEAST_CELL_MODEL_REAL_BUD_DIR_X );
+	v_extra[OUTPUT_MODEL_REAL_BUD_DIR_Y] = spAgent.state.getModelReal( YEAST_CELL_MODEL_REAL_BUD_DIR_Y );
 
 	/* MODEL END */
 
