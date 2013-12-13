@@ -70,7 +70,7 @@ the cell finishes division after clock hits 1.
 Currently, we have added some additional simplification and assumptions:
 \emph{20131125}
 Previous division replaced by budding.
-Budding assumed to start beased on \cite{Charvin2009} at .25.
+Budding assumed to start based on \cite{Charvin2009} at .25.
 All volume donated to bud.
 In this model, a bud is an independent agent,
 and is connected to the mother by a junction end.
@@ -78,8 +78,8 @@ Currently the bud direction is monitored in the cell.
 This is the place where each daughter will bud from.
 In actuality the bud location moves slightly, but that is not captured here.
 Rotation will be included to allow for rotation of the bud direction.
-Daughter bud direction will be set oposite to mother upon bud formation, similar to actual observation.
-Linked mother daughters will have a spring potental that holds them together.
+Daughter bud direction will be set opposite to mother upon bud formation, similar to actual observation.
+Linked mother daughters will have a spring potential that holds them together.
 Currently we do not have a force model for rotation,
 we simply track the direction for future use. 
 The direction for the bud should always be such the direction vector that joins the mother daughter centers.
@@ -104,7 +104,7 @@ The shape of the trial system will be modeled after figure \ref{FIG:chip}.
 The x-axis will be along the horizontal, 
 which is perpendicular to the flow channel.
 The chip is modeled at the scale of a unitbox (close to the size of a single cell).
-The unitbox will be defined as open (1) or closed (0) via a desing matrix,
+The unitbox will be defined as open (1) or closed (0) via a design matrix,
 and this will be used to setup habitability, diffusion and other constants.
 therefore, the x-boundary conditions for diffusive molecules will be Dirchlet.
 They will be set to maintain the same concentration in the channel itself.
@@ -120,8 +120,8 @@ $2.5E-12 \frac{g}{min*cell}$ which comes out to 4.17E-2 $\frac{pg}{sec*cell}$.
 The bulk concentration in the flow channel is $20\frac{g}{L}$ which comes to 2E-2 $frac\{pg}{\mu m^3}$.
 
 \subsection{Diffusion}
-Currently we are assuming that only diffusion exists for transport of species in the enviornment.
-This should be close to true in the channel, as the low rynolds number should prevent advection due to flow at the boundry.
+Currently we are assuming that only diffusion exists for transport of species in the environment.
+This should be close to true in the channel, as the low rynolds number should prevent advection due to flow at the boundary.
 The model calculates flux as so:
 \begin{equation}
 J = D ( \frac{\phi_0}{\kappa_0} - \frac{\phi_1}{\kappa_1} ) \frac{1}{h}
@@ -253,7 +253,7 @@ Uptake of diffusible elements is also possible,
 Standard constant values are being used for this first impl using \texttt{CELL\_ELEM\_CONSTANT\_UPTAKE}.
 Currently we have only one element so its a real, 
 but we should change to array if more are added.
-This would be reflected under `---Difusable elements---'.
+This would be reflected under `---Diffusible elements---'.
 Estimate was provided as above in \ref{S:nutriant}.
 As for diffusion we are assuming a constant, except at boundaries,
 and assuming the solvent is water.
@@ -269,7 +269,7 @@ The flow channel is modeled by constant concentration boundary conditions,
 these are set in \texttt{ELEM\_BULK\_CONCENTRATION}.
 Currently we have only one element so its a real, 
 but we should change to array if more are added.
-This would be reflected under `---Difusable elements---'.
+This would be reflected under `---Diffusible elements---'.
 Estimate was provided as above in \ref{S:nutriant}. 
 
 
@@ -284,7 +284,7 @@ and we can reduce the maximum size and the grid spaces will also reduce.
 
 Design of the domain is given by \texttt{CHIP\_DESIGN\_MATRIX}, 
 entries are zero and one.
-One indicates a habitable region, only z=0 is habbitable.
+One indicates a habitable region, only z=0 is habitable.
 
 
 
@@ -331,7 +331,7 @@ and this is in the direction of the budding, defined as a property in \textit{mo
 Rules defined in \textit{model\_routine\_mech\_intrct.cpp} unless otherwise stated.
 
 \emph{20131112} Standard force will be calculated based on shoving only.
-Shoving is basically like the positive potnetail part of the spring potential,
+Shoving is basically like the positive potential part of the spring potential,
 The spring constant is the cell stiffness \texttt{CELL\_STIFF}, 
 which defined in \textit{model\_define.h} and set to allow 50\% of total disp from shoving.
 
@@ -345,9 +345,9 @@ Initialize all properties at zero.
 
 \subsection{updateIfGridVar}
 Uptake of nutriants is done here. 
-The stratagy is to go through all cells and identify the total amount they have used in a grid varriable \texttt{GRID\_MODEL\_REAL\_GLUCOSE\_DELTA}.
+The strategy is to go through all cells and identify the total amount they have used in a grid variable \texttt{GRID\_MODEL\_REAL\_GLUCOSE\_DELTA}.
 This will be passed to the section that updates the RHS or source term.
-Note that what the sign is opposite from the agent varriable, \texttt{GRID\_MODEL\_REAL\_GLUCOSE\_DELTA}, 
+Note that what the sign is opposite from the agent variable, \texttt{GRID\_MODEL\_REAL\_GLUCOSE\_DELTA}, 
 to the agent from the environment.
 
 Here we add up the agent volume in this grid.
@@ -370,24 +370,24 @@ We note that currently all the volume of an agent is assumed to be excluded from
 We do not calculate the volume in neighbor UBs, so its possible to take up more volume then the UB has.
 
 \subsection{updateIfGridBetaInIfRegion and updateIfGridBetaDomainBdry}
-Here we set the diffusion coeffcient for each grid interface.
-To prevent diffusion into the uninhabtable area, 
-we only assing non zero diffusion to interfaces between 2 habbitable UBs.
+Here we set the diffusion coefficient for each grid interface.
+To prevent diffusion into the uninhabitable area, 
+we only assign non zero diffusion to interfaces between 2 habitable UBs.
 
 Here we also calculate an effective diffusion.
-In eq \ref{EQ:diff} we see that the flux is calclated based on model params;
-however, the amount of conserved quantity (in this case mass) that is transfered is calculated using the full avalible area: $J*h^2$.
+In eq \ref{EQ:diff} we see that the flux is calculated based on model params;
+however, the amount of conserved quantity (in this case mass) that is transfered is calculated using the full available area: $J*h^2$.
 The area for flux may be reduced, excluded, due to cells in the way.
-We cannot change the area used to calcualte transfer,
-but we can modify $D$ to equivlantly compensate for reduced area.
-To do this we scale $D$ by the amount fraction of volume avalible.
-This is done for each UB seperatly, and the harmonic mean,
+We cannot change the area used to calculate transfer,
+but we can modify $D$ to equivalently compensate for reduced area.
+To do this we scale $D$ by the amount fraction of volume available.
+This is done for each UB separately, and the harmonic mean,
 as suggested by SK, was used to combine them for the $D$ at the interface.
 
-A similar stratagy was used at the boundries modeling the flow channel.
-Here we have dirchlet boundry conditions on all x walls,
-and in this mehtod we set all diffusion at boundries to 0, except 
-in x directions AND when we are at a habbitable, non chip wall, area.
+A similar strategy was used at the boundaries modeling the flow channel.
+Here we have dirchlet boundary conditions on all x walls,
+and in this method we set all diffusion at boundaries to 0, except 
+in x directions AND when we are at a habitable, non chip wall, area.
  
 All other betas are set to zero!
 
@@ -401,7 +401,7 @@ so just set it to take everything from the box.
 Note that a warning can be printed when this happens, 
 to fix the issue of taking to much use smaller grid state step sizes.
 When removing the mass, it is done continuously while the PDE is solved,
-this means we need to calclate the source term, which is change/ (volume * time step ).
+this means we need to calculate the source term, which is change/ (volume * time step ).
 
 
 

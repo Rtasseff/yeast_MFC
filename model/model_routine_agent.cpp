@@ -22,6 +22,8 @@ static void getIsHabitableArray( const VIdx vIdx, BOOL aa_isHabitable[3][3] );
 
 static void getIsHabitable( const VIdx vIdx, BOOL& isHabitable );
 
+static REAL computeGridDelta( const REAL dir[2], const VReal vOffset, const REAL r, const REAL IF );
+
 
 #if HAS_SPAGENT
 void ModelRoutine::addSpAgents( const BOOL init, const VIdx& startVIdx, const VIdx& regionSize, const IfGridBoxData<BOOL>& ifGridHabitableBoxData, Vector<VIdx>& v_spAgentVIdx, Vector<SpAgentState>& v_spAgentState, Vector<VReal>& v_spAgentOffset ) {
@@ -298,8 +300,28 @@ void ModelRoutine::adjustSpAgent( const VIdx& vIdx, const AgentJunctionInfo& jun
 	Allowing walls to be a little closer to make up for large grid resolution.
 	*/
 
+
+
 	REAL dist;
 	VIdx vIdxTmp;
+	S32 xUBOffset;
+	S32 yUBOffset;
+	BOOL aa_isHabitable[3][3] = {{false,false,false},{false,false,false},{false,false,false}};
+	// uninhabitable grids represent bounds
+	getIsHabitableArray( vIdx, aa_isHabitable );
+/*
+	// loop though surounding grids
+	for ( S32 x_i = 0; x_i < 3; x_i++ ) {
+		for ( S32 y_i = 0; y_i < 3; y_i++ ) {
+			xUBOffset = x_i - 1;
+			yUBOffset = y_i - 1;
+			// is this a boundry:
+			if (aa_isHabitable[x_i][y_i]==false){
+				computeGridDelta( {xUBOffset,yUBOffset}, vOffset, R0, const REAL IF )
+			}
+
+*/
+	
 
 
 	// impact with y bound low
@@ -548,6 +570,72 @@ static void getIsHabitableArray( const VIdx vIdx, BOOL aa_isHabitable[3][3] ){
 		}
 	}
 }
-	
+
+static REAL computeGridDelta( const REAL dir[2], const VReal vOffset, const REAL r, const REAL IF ) {
+	/* Compute specified grid delta, where delta is the overlap distance with the grid.
+	Specifically delta is the difference between the radius and the shortest distance to the 
+	specified grid boundary, edge for direct neighbors and corner for corner neighbors.
+	If the agent is a sphere then delta is the maximum distance within the grid on a line
+	that goes from the agent center to the agent boundary, or maximum overlap distance.
+	Can be used to calculate overlap for mechanical force interactions, or overlap
+	for use in estimating the occupation fraction.
+	Use dir to specify neighbor grid as upper (1) or lower (-1) for each dimension (x,y) or zero to ignore that dimension.
+	vOffset is agent offset at center box
+	r is agent radius 
+	IF is the interface Grid spacing 
+	Will return zero for the center UB {0,0}.
+	*/
+
+	/* this could be done in shorter code by calculating the DHat and setting dist to sqrt(sum(DHat**2))
+	but we want to avoid squaring and rooting when possible.
+	*/
+	REAL delta;
+
+	if (dir[0] == 0 && dir[1] == 0 ) {
+		delta = 0.0;
+	}
+	else {
+		REAL DHat[2] = {0,0};
+		REAL b = 0;
+		REAL dist = 0;
+
+		for( S32 dim = 0 ; dim < 2 ; dim++ ) {
+			if ( dir[dim]== 1 || dir[dim] == -1 ) {
+				// boundary location in this dim
+				b = ( ( REAL ) dir[dim] ) * 0.5 * IF;
+				// subtract locations in this dim
+				DHat[dim] = vOffset[dim] - b;
+			}
+			else if ( dir[dim] != 0 ) {
+				cout << dir[dim] <<endl;
+				ERROR ( "Incorrect neighbor specification in dir in computeGridDelta" );
+			}
+		}
+		if ( dir[0]==0 ) {
+			//dim 1 must be not zero
+			dist = FABS(DHat[1]);
+		}
+		else if ( dir[1]==0 ) {
+			//dim 0 must be not zero
+			dist = FABS(DHat[0]);
+		}
+		else {
+			// corner
+			dist = SQRT ( DHat[0]*DHat[0] + DHat[1]*DHat[1] );
+		}
+
+		if ( r > dist ) {
+			delta = r - dist;
+		}
+		else {
+			delta = 0.0;
+		}
+
+
+	}
+	return( delta );
+
+}
+
 	
 
