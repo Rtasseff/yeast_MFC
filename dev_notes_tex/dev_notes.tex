@@ -55,8 +55,8 @@ in the notes; however, we will try to mark them as deprecated.
 time = seconds (sec);
 length = micrometers ($\mu m$);
 volume = cubic micrometers ($\mu m^3$);
-mass = micro grams ($\mu g$);
-concentration = $frac\{\mu g}{\mu m^3}$;
+mass = micro grams ($pg$);
+concentration = $\frac{pg}{\mu m^3}$;
 
 \subsection{Growth and Division}
 \emph{20131111} We are assuming a simple model of growth, division and cell cycle control\cite{Charvin2009}.
@@ -117,7 +117,7 @@ Currently we treat glucose as only required nutrient.
 We assume uptake is constant.
 Estimates were provided by Gilles Lab to be an uptake of
 $2.5E-12 \frac{g}{min*cell}$ which comes out to 4.17E-2 $\frac{pg}{sec*cell}$.
-The bulk concentration in the flow channel is $20\frac{g}{L}$ which comes to 2E-2 $frac\{pg}{\mu m^3}$.
+The bulk concentration in the flow channel is $20\frac{g}{L}$ which comes to 2E-2 $\frac{pg}{\mu m^3}$.
 
 \subsection{Diffusion}
 Currently we are assuming that only diffusion exists for transport of species in the environment.
@@ -391,7 +391,7 @@ in x directions AND when we are at a habitable, non chip wall, area.
  
 All other betas are set to zero!
 
-\subsection{updateIfGridRHSLinear)
+\subsection{updateIfGridRHSLinear}
 Here is where we update the source term for the grid UB.
 This is the chance we have to complete the cell uptake.
 Using the previously, \textit{updateIfGridVar}, set variable, \texttt{GRID\_MODEL\_REAL\_GLUCOSE\_DELTA}.  
@@ -409,7 +409,7 @@ this means we need to calculate the source term, which is change/ (volume * time
 
 \begin{figure}
 \begin{center}
-\includegraphics{figs/chip.png}
+\includegraphics[natwidth=3in,natheight=3.5in,width=3in]{figs/chip.png}
 \caption{Screen shot of loaded chip.  
 Flow channels are on the left and right (out of frame).
 The model will simulate x-axis along or parallel to the horizontal of this image, 
