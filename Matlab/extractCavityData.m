@@ -9,8 +9,12 @@
 %0) Mean cell size as a function of time DONE
 %1) average density as a function of time DONE
 %2) cell mean squared displacement as a function of time DONE
-%3) assume bidding direction is defined by a unit vector from the cell center to the bud neck, this direction changes and in the rough 2D approximation this change can be quantified as angular displacement in the the x,y plane.  It would be great to have the mean squared angular displacement as a function of time.
-%4) difusión profile (I will get this from the paper first, but am including it here for documentation purposes)
+%3) assume bidding direction is defined by a unit vector from the cell center to the bud neck, this direction changes 
+%and in the rough 2D approximation this change can be quantified as angular displacement in the the x,y plane.  
+%It would be great to have the mean squared angular displacement as a
+%function of time. PARTIALLY DONE
+%4) difusión profile (I will get this from the paper first, but am
+%including it here for documentation purposes) DONE
 
 
 % sample project :
