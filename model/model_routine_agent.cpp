@@ -48,7 +48,7 @@ void ModelRoutine::addSpAgents( const BOOL init, const VIdx& startVIdx, const VI
 			// set up the state
 			state.setType( AGENT_YEAST_CELL );
 			state.setRadius( radius );
-			CHECK ( NUM_YEAST_CELL_MODEL_REALS == 3 );
+			CHECK ( NUM_YEAST_CELL_MODEL_REALS == 4 );
 			for ( S32 i = 0; i < NUM_YEAST_CELL_MODEL_REALS; i++ ) {
 				state.setModelReal( i, 0 );
 			}
@@ -168,12 +168,12 @@ void ModelRoutine::updateSpAgentState( const VIdx& vIdx, const AgentJunctionInfo
 				if ( state.getModelInt(YEAST_CELL_MODEL_INT_MOTHER) ==  0 ){
 					/*2  -Daughter growth-
 					grom at combined rate of this agent + mother
-					where we assume mother to be of critical volume
+					where we assume mother vol set in model real at bud formation
 					*/
-					deltaV = STATE_AND_GRID_TIME_STEP * GROWTH_RATE * ( V0 + VOL_CRITICAL );
+					deltaV = STATE_AND_GRID_TIME_STEP * GROWTH_RATE * ( V0 + state.getModelReal(YEAST_CELL_MODEL_REAL_MOTHER_VOL) );
 				}
 				else if ( state.getModelInt(YEAST_CELL_MODEL_INT_MOTHER) ==  1 ){
-					// 3 mothers do not grow
+					// 3, mothers do not grow
 					deltaV = 0.0;
 				}
 				else {
@@ -189,7 +189,13 @@ void ModelRoutine::updateSpAgentState( const VIdx& vIdx, const AgentJunctionInfo
 
 			// account for reduced glucose avalible
 			deltaV *= fracGlucoseAvail;
-			state.setRadius( CBRT( ( V0 + deltaV ) / GEN_PI43 ) );
+			// To avoid error, only grow if you are not at maximum size.
+			if ((V0 + deltaV)<(CELL_VOL_MAX-GEN_EPS)){
+				state.setRadius( CBRT( ( V0 + deltaV ) / GEN_PI43 ) );
+			}
+			else if (WRITE_WARNING==true){
+				cout <<"WARNING:MRA_USAS_0002 - cell near maximum size, growth prevented" <<endl;
+			}
 		}
 
 
@@ -240,7 +246,7 @@ void ModelRoutine::updateSpAgentBirthDeath( const VIdx& vIdx, const SpAgent& spA
 		if ( vIdx[0]==0 ){
 			dist = spAgent.vOffset[0] + 0.5 * IF_GRID_SPACING;
 		}
-		if ( vIdx[0] == (UB_NUM[0] - 1) ){
+		if ( vIdx[0] == (UB_NUM[0] - 2) ){ // adjusted to remove one layer of IFs, which are a buffer for tech reasons
 			dist = 0.5 * IF_GRID_SPACING - spAgent.vOffset[0];
 		}
 
@@ -462,6 +468,7 @@ void ModelRoutine::adjustSpAgent( const VIdx& vIdx, const AgentJunctionInfo& jun
 }
 
 void ModelRoutine::divideSpAgent( const VIdx& vIdx, const AgentJunctionInfo& junctionInfo, const VReal& offset, const AgentMechIntrctData& mechIntrctData, const Vector<NbrBox<REAL> >& v_gridPhiNbrBox/* [elemIdx] */, const Vector<NbrBox<REAL> >& v_gridModelRealNbrBox/* [elemIdx] */, const Vector<NbrBox<S32> >& v_gridModelIntNbrBox/* [elemIdx] */, SpAgentState& motherState, VReal& motherDisp, SpAgentState& daughterState, VReal& daughterDisp, Vector<BOOL>& v_junctionDivide, BOOL& motherDaughterLinked, JunctionEnd& motherEnd, JunctionEnd& daughterEnd ) {
+	cout <<"in divide" <<endl;
 	/* MODEL START */
 
 	/* Only allow division one at a time,
@@ -481,17 +488,37 @@ void ModelRoutine::divideSpAgent( const VIdx& vIdx, const AgentJunctionInfo& jun
 
 	REAL R0 = motherState.getRadius();
 	REAL V0 = GEN_PI43 * R0 * R0 * R0;
+	REAL Vd = 0;
 
 	/* ---Divide--- 
 	assuming mother critical volume
-	assuming an all at once divide,
-	should improve to account for budding
+
 	*/
 	daughterState.setType( motherState.getType() );
-	CHECK( V0 > VOL_CRITICAL); 
-	// set radius assuming all V > VC goes to d
-	REAL Vd = V0 - VOL_CRITICAL;
-	motherState.setRadius( CBRT( VOL_CRITICAL / GEN_PI43 ) );
+	
+	
+	/* -Volume- 
+	A portion of new mass goes to bud, pre set as constant
+	However, if mother is too large and risks exceeding max size in next G1
+	additioanl volume will be moved to bud to maintain mass conservation
+	*/
+	 
+	if (V0 > CELL_VOL_BUD_MAX) {
+		// set radius assuming all V > V_bud_max goes to d
+		Vd = V0 - CELL_VOL_BUD_MAX;
+		if (WRITE_WARNING==true){
+		// will always happen if cell is in chamber long enough
+		// not super important as mass is still conserved.
+		//	cout <<"WARNING:MRA_DSA_0001 - mother over maximum size at budding, extra volume to daughter" <<endl;
+		}
+	}
+	else {
+		Vd = VOL_MOTHER_BUD;
+	}
+	// do not allow mother to go bellow v critical
+	CHECK( (V0-Vd) > VOL_CRITICAL);	
+
+	motherState.setRadius( CBRT( (V0-Vd) / GEN_PI43 ) );
 	daughterState.setRadius( CBRT( Vd / GEN_PI43 ) );
 	// displacement determined by bud dir and radius
 	motherDisp[0] = -1.0 * motherState.getModelReal( YEAST_CELL_MODEL_REAL_BUD_DIR_X ) * ( motherState.getRadius() - BUD_OVERLAP );
@@ -502,12 +529,15 @@ void ModelRoutine::divideSpAgent( const VIdx& vIdx, const AgentJunctionInfo& jun
 	daughterDisp[2] = 0.0;
 
 	// set up state for daughter	
-	CHECK( NUM_YEAST_CELL_MODEL_REALS==3 );
+	CHECK( NUM_YEAST_CELL_MODEL_REALS==4 );
 	for ( S32 i = 0; i < NUM_YEAST_CELL_MODEL_REALS; i++ ) {
 		daughterState.setModelReal( i, 0 );
 	}
+
 	daughterState.setModelReal(YEAST_CELL_MODEL_REAL_BUD_DIR_X, -1.0 * motherState.getModelReal( YEAST_CELL_MODEL_REAL_BUD_DIR_X ) );
 	daughterState.setModelReal(YEAST_CELL_MODEL_REAL_BUD_DIR_Y, -1.0 * motherState.getModelReal( YEAST_CELL_MODEL_REAL_BUD_DIR_Y ) );
+	daughterState.setModelReal(YEAST_CELL_MODEL_REAL_MOTHER_VOL, (V0-Vd)  );
+
 	// set agent to fully occupy the center box
 
 	CHECK( NUM_YEAST_CELL_MODEL_INTS == 1 );
@@ -521,7 +551,7 @@ void ModelRoutine::divideSpAgent( const VIdx& vIdx, const AgentJunctionInfo& jun
 	motherEnd.setType( JUNCTION_END_BUD );
 	daughterEnd.setType( JUNCTION_END_BUD );
 
-
+	cout <<"out of divide" <<endl;
 
 	/* MODEL END */
 
