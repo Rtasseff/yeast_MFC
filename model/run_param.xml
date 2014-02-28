@@ -18,7 +18,7 @@ Biocellion has three main components.
 <!-- time_step, set the number of baseline time steps, required
 	num_baseline: number of baseline (to simulate 1-2 and 2) time steps, required, integer, [1,)
 -->
-<time_step num_baseline="43200"/>
+<time_step num_baseline="150000"/>
 <!-- domain, parameters describing the simulation domain
 	x: simulation grid size in the x direction, must be an integer multiple of refine_ratio^(number of AMR levels - 1) * 4 (minimum partition size), required, integer, [1,)
 	y: simulation grid size in the y direction, must be an integer multiple of refine_ratio^(number of AMR levels - 1) * 4 (minimum partition size), required, integer, [1,)
@@ -39,7 +39,7 @@ Biocellion has three main components.
 	num_extra: set the number of extra variables (in addition to radius and color) for particles, required, integer, [0,)
 	grid: set to vtm to output data using the VTK hierarchical box data format (currently only the vtm format is supported), required, vtm
 -->
-<output path="/users/rtasseff/biocellion/yeast_MFC/output" interval="300" particle="pvtu" num_extra="2" grid="vtm"/>
+<output path="/users/rtasseff/biocellion/yeast_MFC/output" interval="300" particle="pvtu" num_extra="3" grid="vtm"/>
 
 </required>
 
@@ -76,7 +76,7 @@ Biocellion has three main components.
 	regridding: regridding interval (unit: baseline time steps), regridding should be equal to or smaller than load_balance and regridding should equally divide load_balance, optional, integer, default=100, [1,)
 	checkpoint: checkpoint interval (0: turn off, unit: baseline time steps), optional, default=0, integer, [0,)
 -->
-<interval summary="1000" load_balance="1000" regridding="1000" checkpoint="10000"/>
+<interval summary="1000" load_balance="5000" regridding="5000" checkpoint="10000"/>
 
 <!-- amr, controls adaptive mesh refinement
 	refine_ratio: adaptive mesh refinement ratio between two consecutive levels, optional, default=2, 2|4

@@ -2,6 +2,9 @@
 output/*
 movies/*
 data/*
+analysis/data/*
+analysis/output/*
+
 
 # tex
 *.aux

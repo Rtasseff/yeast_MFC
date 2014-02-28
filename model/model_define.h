@@ -54,6 +54,7 @@ the size must agree with run_param.xml
 typedef enum _output_model_real_e {
 	OUTPUT_MODEL_REAL_BUD_DIR_X,
 	OUTPUT_MODEL_REAL_BUD_DIR_Y,
+	OUTPUT_MODEL_REAL_ID,
 	NUM_OUTPUT_MODEL_REALS
 } output_model_real_e;
 
